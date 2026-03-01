@@ -1,0 +1,2501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLATFORM FIGHTER — ENGINE v0.4</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0a0a0f;
+    --panel:   #10101a;
+    --border:  #1e1e38;
+    --accent:  #00ffc8;
+    --text:    #c8d8e8;
+    --dim:     #4a5568;
+    --p1:      #00c8ff;
+    --p2:      #ff6b35;
+    --startup: #ff8800;
+    --active:  #ff2244;
+    --endlag:  #aa44ff;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  #app {
+    display: flex; flex-direction: column;
+    align-items: center;
+    height: 100vh;
+    padding: 10px 14px; gap: 8px;
+  }
+
+  header {
+    display: flex; align-items: center; gap: 20px;
+    width: 100%; max-width: 960px;
+  }
+  header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px; font-weight: 900; letter-spacing: 4px;
+    color: var(--accent); text-shadow: 0 0 12px var(--accent);
+  }
+  header .version { font-size: 10px; color: var(--dim); letter-spacing: 2px; }
+
+  #canvas-wrap {
+    position: relative;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 40px rgba(0,255,200,0.06), inset 0 0 60px rgba(0,0,0,0.4);
+  }
+  canvas { display: block; image-rendering: pixelated; }
+  #canvas-wrap::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom, transparent 0px, transparent 2px,
+      rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px
+    );
+    pointer-events: none;
+  }
+
+  #hud {
+    display: grid; grid-template-columns: 1fr auto 1fr;
+    width: 100%; max-width: 960px; gap: 8px; align-items: start;
+  }
+
+  .fighter-panel {
+    background: var(--panel); border: 1px solid var(--border);
+    padding: 8px 12px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .fighter-panel.p1 { border-left: 3px solid var(--p1); }
+  .fighter-panel.p2 { border-right: 3px solid var(--p2); text-align: right; }
+
+  .fighter-panel .name {
+    font-family: 'Orbitron', sans-serif; font-size: 10px; letter-spacing: 2px;
+  }
+  .p1 .name { color: var(--p1); text-shadow: 0 0 8px var(--p1); }
+  .p2 .name { color: var(--p2); text-shadow: 0 0 8px var(--p2); }
+
+  .stat-row { display: flex; gap: 6px; align-items: center; font-size: 9px; color: var(--dim); }
+  .p2 .stat-row { justify-content: flex-end; }
+  .stat-val { color: var(--text); }
+
+  .dmg-counter {
+    font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 900; letter-spacing: 1px;
+  }
+  .p1 .dmg-counter { color: var(--p1); }
+  .p2 .dmg-counter { color: var(--p2); }
+  .dmg-counter.flash { color: #fff !important; text-shadow: 0 0 14px #fff; }
+
+  .phase-bar { height: 4px; background: var(--border); margin-top: 2px; overflow: hidden; }
+  .phase-fill { height: 100%; width: 0%; transition: width 0.04s linear; }
+
+  /* Hitstun bar */
+  .stun-bar { height: 3px; background: var(--border); margin-top: 1px; overflow: hidden; }
+  .stun-fill { height: 100%; width: 0%; background: #ffffff; transition: width 0.04s linear; }
+
+  /* Shield bar */
+  .shield-bar { height: 5px; background: var(--border); margin-top: 2px; overflow: hidden; border-radius: 2px; }
+  .shield-fill {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #44aaff, #aaddff);
+    transition: width 0.06s linear;
+  }
+  .shield-fill.broken { background: #ff2244; animation: shieldBreakPulse 0.4s ease-out; }
+  @keyframes shieldBreakPulse { 0%{opacity:1} 50%{opacity:0.2} 100%{opacity:1} }
+
+  /* Ledge indicator dot */
+  .ledge-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 6px var(--accent);
+    margin-left: 4px; vertical-align: middle; opacity: 0;
+    transition: opacity 0.1s;
+  }
+  .ledge-dot.active { opacity: 1; }
+
+  .controls-panel {
+    background: var(--panel); border: 1px solid var(--border); padding: 8px 12px; text-align: center;
+  }
+  .controls-panel h2 {
+    font-family: 'Orbitron', sans-serif; font-size: 8px; letter-spacing: 3px; color: var(--dim); margin-bottom: 5px;
+  }
+  .key-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; font-size: 8px; color: var(--dim); text-align: left; }
+  .key { color: var(--accent); }
+
+  .legend { display: flex; gap: 8px; margin-top: 6px; justify-content: center; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 8px; color: var(--dim); }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+  #debug-bar {
+    width: 100%; max-width: 960px; display: flex; gap: 14px;
+    font-size: 9px; color: var(--dim); letter-spacing: 1px; flex-wrap: wrap;
+  }
+  #debug-bar span { color: var(--text); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>PLATFORM FIGHTER</h1>
+    <div class="version">ENGINE v0.4 — SHIELD / DODGE / LEDGE</div>
+  </header>
+
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div id="hud">
+    <div class="fighter-panel p1">
+      <div class="name">BLAZE</div>
+      <div class="dmg-counter" id="p1-dmg">0%</div>
+      <div class="stat-row">STATE  <span class="stat-val" id="p1-state">IDLE</span></div>
+      <div class="stat-row">MOVE   <span class="stat-val" id="p1-move">—</span></div>
+      <div class="stat-row">FRAME  <span class="stat-val" id="p1-frame">—</span></div>
+      <div class="stat-row">STUN   <span class="stat-val" id="p1-stun">—</span></div>
+      <div class="stat-row">JUMPS  <span class="stat-val" id="p1-jumps">2</span></div>
+      <div class="stat-row">SHIELD <span class="stat-val" id="p1-shield">100</span><span class="ledge-dot" id="p1-ledge"></span></div>
+      <div class="phase-bar"><div class="phase-fill" id="p1-phase"></div></div>
+      <div class="stun-bar"><div class="stun-fill" id="p1-stun-bar"></div></div>
+      <div class="shield-bar"><div class="shield-fill" id="p1-shield-bar"></div></div>
+    </div>
+
+    <div class="controls-panel">
+      <h2>CONTROLS</h2>
+      <div class="key-grid">
+        <div><span class="key">A / D</span> Move P1</div>
+        <div><span class="key">← / →</span> Move P2</div>
+        <div><span class="key">W</span> Jump P1</div>
+        <div><span class="key">↑</span> Jump P2</div>
+        <div><span class="key">S</span> Fast Fall / Down</div>
+        <div><span class="key">↓</span> Fast Fall P2</div>
+        <div><span class="key">J</span> Jab P1</div>
+        <div><span class="key">Num1</span> Jab P2</div>
+        <div><span class="key">K</span> Tilt/Fair P1</div>
+        <div><span class="key">Num2</span> Tilt/Fair P2</div>
+        <div><span class="key">L</span> U-Tilt/Uair P1</div>
+        <div><span class="key">Num3</span> U-Tilt/Uair P2</div>
+        <div><span class="key">;</span> D-Tilt/Dair P1</div>
+        <div><span class="key">Num4</span> D-Tilt/Dair P2</div>
+        <div><span class="key">F</span> Shield P1</div>
+        <div><span class="key">Num5</span> Shield P2</div>
+        <div><span class="key">G</span> Roll/AirDodge P1</div>
+        <div><span class="key">Num6</span> Roll/AirDodge P2</div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="swatch" style="background:var(--startup)"></div>Startup</div>
+        <div class="legend-item"><div class="swatch" style="background:var(--active)"></div>Active</div>
+        <div class="legend-item"><div class="swatch" style="background:var(--endlag)"></div>Endlag</div>
+        <div class="legend-item"><div class="swatch" style="background:rgba(255,50,70,0.8)"></div>Hitbox</div>
+        <div class="legend-item"><div class="swatch" style="background:rgba(0,200,255,0.5)"></div>Hurtbox</div>
+        <div class="legend-item"><div class="swatch" style="background:rgba(80,160,255,0.6)"></div>Shield</div>
+      </div>
+    </div>
+
+    <div class="fighter-panel p2">
+      <div class="name">FROST</div>
+      <div class="dmg-counter" id="p2-dmg">0%</div>
+      <div class="stat-row">STATE  <span class="stat-val" id="p2-state">IDLE</span></div>
+      <div class="stat-row">MOVE   <span class="stat-val" id="p2-move">—</span></div>
+      <div class="stat-row">FRAME  <span class="stat-val" id="p2-frame">—</span></div>
+      <div class="stat-row">STUN   <span class="stat-val" id="p2-stun">—</span></div>
+      <div class="stat-row">JUMPS  <span class="stat-val" id="p2-jumps">2</span></div>
+      <div class="stat-row">SHIELD <span class="stat-val" id="p2-shield">100</span><span class="ledge-dot" id="p2-ledge"></span></div>
+      <div class="phase-bar"><div class="phase-fill" id="p2-phase"></div></div>
+      <div class="stun-bar"><div class="stun-fill" id="p2-stun-bar"></div></div>
+      <div class="shield-bar"><div class="shield-fill" id="p2-shield-bar"></div></div>
+    </div>
+  </div>
+
+  <div id="debug-bar">
+    <div>FPS: <span id="fps">60</span></div>
+    <div>TICK: <span id="tick">0</span></div>
+    <div>HITS: <span id="hits">0</span></div>
+    <div>PAUSE: <span id="hitpause">0</span></div>
+    <div>DEBUG: <span id="debug-mode">OFF</span> <span style="color:var(--dim)">(Tab)</span></div>
+  </div>
+
+</div>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const FIXED_DT   = 1 / 60;
+const GRAVITY    = 2200;
+const TERMINAL_V = 1400;
+
+// Hit pause thresholds (in raw knockback magnitude before damage scaling)
+// Hits above these raw KB values freeze both fighters for N frames
+const HIT_PAUSE_THRESHOLDS = [
+  { minKb: 600, frames: 8  },
+  { minKb: 350, frames: 5  },
+  { minKb: 150, frames: 3  },
+  { minKb:   0, frames: 1  },
+];
+
+// Hitstun coefficient: hitstunFrames = floor(knockbackMagnitude * HITSTUN_SCALE)
+const HITSTUN_SCALE = 0.45;
+
+// Debug overlay toggle
+let debugMode = false;
+window.addEventListener('keydown', e => { if (e.code === 'Tab') { e.preventDefault(); debugMode = !debugMode; } });
+
+// ═══════════════════════════════════════════════════════════
+//  STATE ENUM
+// ═══════════════════════════════════════════════════════════
+const State = Object.freeze({
+  IDLE:        'IDLE',
+  RUN:         'RUN',
+  AIRBORNE:    'AIRBORNE',
+  FASTFALL:    'FASTFALL',
+  LANDING:     'LANDING',
+  STARTUP:     'STARTUP',
+  ACTIVE:      'ACTIVE',
+  ENDLAG:      'ENDLAG',
+  LANDLAG:     'LANDLAG',
+  HITSTUN:     'HITSTUN',
+  // ── New v0.4 states ──────────────────────
+  SHIELD:      'SHIELD',      // holding shield button, grounded
+  SHIELDSTUN:  'SHIELDSTUN',  // brief lockout after absorbing a hit on shield
+  SHIELDBREAK: 'SHIELDBREAK', // shield broke — long stun, vulnerable
+  ROLL_F:      'ROLL_F',      // forward roll (grounded dodge)
+  ROLL_B:      'ROLL_B',      // backward roll (grounded dodge)
+  AIRDODGE:    'AIRDODGE',    // aerial dodge (directional, one use per air-time)
+  LEDGE:       'LEDGE',       // hanging on a ledge, invincible for first N frames
+});
+
+const ATTACK_STATES = new Set([State.STARTUP, State.ACTIVE, State.ENDLAG]);
+const isAttackState = s => ATTACK_STATES.has(s);
+
+// States that completely block voluntary action (movement, attacks, jumps)
+const LOCKED_STATES = new Set([
+  ...ATTACK_STATES,
+  State.HITSTUN, State.SHIELDSTUN, State.SHIELDBREAK,
+  State.ROLL_F, State.ROLL_B, State.AIRDODGE, State.LEDGE,
+  State.LANDLAG,
+]);
+const isLocked = s => LOCKED_STATES.has(s);
+
+// ── Shield constants ──────────────────────────────────────
+const SHIELD_MAX          = 100;   // full shield health
+const SHIELD_REGEN_RATE   = 0.28;  // hp per frame when shield is up but not being hit
+const SHIELD_PASSIVE_DRAIN= 0.10;  // hp per frame while actively held
+const SHIELD_MIN_SIZE     = 0.38;  // minimum bubble radius as fraction of full
+const SHIELD_BREAK_STUN   = 180;   // frames of break stun (3 seconds)
+const SHIELD_COOLDOWN     = 60;    // frames after releasing shield before it can be used again if near-broken
+const SHIELD_STUN_BASE    = 2;     // base frames of shield stun
+const SHIELD_STUN_PER_DMG = 0.6;   // extra frames per damage point of the blocked hit
+
+// ── Roll constants ────────────────────────────────────────
+const ROLL_DURATION       = 20;    // total frames of a roll
+const ROLL_INVULN_START   = 4;     // first invincible frame (1-indexed)
+const ROLL_INVULN_END     = 16;    // last invincible frame
+const ROLL_DISTANCE       = 110;   // pixels traveled over full duration
+const ROLL_COOLDOWN       = 40;    // frames before rolling again after a roll
+
+// ── Air dodge constants ───────────────────────────────────
+const AIRDODGE_DURATION   = 26;    // total frames
+const AIRDODGE_INVULN_START = 4;
+const AIRDODGE_INVULN_END   = 20;
+const AIRDODGE_SPEED      = 580;   // px/s in chosen direction
+const AIRDODGE_ENDLAG     = 14;    // frames of non-invincible post-dodge lag
+
+// ── Ledge constants ───────────────────────────────────────
+const LEDGE_INVULN_FRAMES = 30;    // invincible frames immediately after snapping
+const LEDGE_SNAP_DIST     = 48;    // px — how close to a ledge corner to snap
+const LEDGE_HANG_LIMIT    = 300;   // frames before auto-release (prevents camping)
+const LEDGE_GETUP_FRAMES  = 18;    // landing-lag equivalent after climbing up
+
+// ═══════════════════════════════════════════════════════════
+//  RECT — shared axis-aligned bounding box primitive
+//  Used by both Hitbox and Hurtbox; keeps overlap logic DRY.
+// ═══════════════════════════════════════════════════════════
+class Rect {
+  constructor(x, y, w, h) { this.x = x; this.y = y; this.w = w; this.h = h; }
+  get right()  { return this.x + this.w; }
+  get bottom() { return this.y + this.h; }
+
+  overlaps(other) {
+    return this.x < other.right  && this.right  > other.x &&
+           this.y < other.bottom && this.bottom > other.y;
+  }
+
+  // Draw helper used by both Hitbox and Hurtbox
+  draw(ctx, fillStyle, strokeStyle, alpha = 0.4) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle   = fillStyle;
+    ctx.fillRect(Math.round(this.x), Math.round(this.y), this.w, this.h);
+    ctx.globalAlpha = Math.min(1, alpha + 0.4);
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(Math.round(this.x) + .5, Math.round(this.y) + .5, this.w - 1, this.h - 1);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HITBOX
+//  Represents a single offensive box spawned during a move's
+//  ACTIVE window. Owns the move data it was created from and
+//  a Set of targets already struck (prevents multi-hit within
+//  the same activation — the core anti-abuse mechanism).
+//
+//  World-space rect is computed fresh each frame from the
+//  owner's current position and facing, so it tracks the
+//  fighter correctly even if they move during an active window.
+// ═══════════════════════════════════════════════════════════
+class Hitbox {
+  /**
+   * @param {Fighter} owner    — the fighter who owns this hitbox
+   * @param {object}  moveDef  — the move data object (from MOVESETS)
+   */
+  constructor(owner, moveDef) {
+    this.owner      = owner;
+    this.moveDef    = moveDef;
+    // hitTargets: Set<Fighter> — each fighter can only be hit once per
+    // hitbox activation. Reset when a new Hitbox is created (i.e. each
+    // time the move re-enters ACTIVE, which can't currently happen, but
+    // the architecture supports multi-hit moves in the future via a
+    // hitReset flag on the move data).
+    this.hitTargets = new Set();
+    this.id         = Hitbox._nextId++;
+  }
+
+  // Returns the current world-space Rect (facing-aware, re-computed every call)
+  getRect() {
+    const { ox, oy, w, h } = this.moveDef.hitbox;
+    const facedOx = ox * this.owner.facing;
+    return new Rect(
+      this.owner.cx + facedOx - w / 2,
+      this.owner.y  + oy,
+      w, h
+    );
+  }
+
+  // Convenience: test against a Hurtbox
+  overlapsHurtbox(hurtbox) {
+    return this.getRect().overlaps(hurtbox.getRect());
+  }
+
+  draw(ctx) {
+    const r = this.getRect();
+    ctx.save();
+    ctx.shadowColor = this.moveDef.sfxColor;
+    ctx.shadowBlur  = 14;
+    r.draw(ctx, this.moveDef.sfxColor, '#ffffff', 0.50);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+Hitbox._nextId = 0;
+
+// ═══════════════════════════════════════════════════════════
+//  HURTBOX
+//  Represents the vulnerable area of a fighter.
+//  By default it matches the fighter's body rect exactly.
+//  The architecture intentionally supports multiple hurtboxes
+//  per fighter (e.g. extended limb during a move), and per-state
+//  hurtbox modification (crouch shrinks hurtbox, etc.) — simply
+//  push additional Hurtbox objects into fighter.hurtboxes.
+//
+//  offset/size are defined relative to the fighter's body rect.
+//  ox = 0, oy = 0, w = fighter.w, h = fighter.h  → full body.
+// ═══════════════════════════════════════════════════════════
+class Hurtbox {
+  /**
+   * @param {Fighter} owner
+   * @param {object}  def    — { ox, oy, w, h } body-relative offsets
+   * @param {string}  [tag]  — optional tag ('body', 'head', 'leg') for future use
+   */
+  constructor(owner, def, tag = 'body') {
+    this.owner = owner;
+    this.def   = def;   // { ox, oy, w, h }
+    this.tag   = tag;
+    this.active = true; // can be toggled per state (e.g. invincibility frames)
+  }
+
+  getRect() {
+    return new Rect(
+      this.owner.x + this.def.ox,
+      this.owner.y + this.def.oy,
+      this.def.w,
+      this.def.h
+    );
+  }
+
+  draw(ctx) {
+    if (!this.active) return;
+    const r = this.getRect();
+    r.draw(ctx, 'rgba(0,200,255,0.18)', 'rgba(0,200,255,0.9)', 0.18);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  KNOCKBACK CALCULATOR
+//  All knockback math lives here — nowhere else.
+//
+//  Formula (Smash-Bros-inspired):
+//    rawKb   = baseKnockback + (damage * knockbackGrowth)
+//    scaledKb = rawKb * (1 + targetPercent / 100)
+//    vx = cos(angle) * scaledKb * attackerFacing
+//    vy = -|sin(angle)| * scaledKb        (negative = up)
+//
+//  Hitstun (frames):
+//    floor(scaledKb * HITSTUN_SCALE)
+//
+//  Hit pause (frames, applied to BOTH fighters):
+//    Lookup in HIT_PAUSE_THRESHOLDS by rawKb (pre-scaling),
+//    so light jabs always feel snappy regardless of target %.
+// ═══════════════════════════════════════════════════════════
+function computeKnockback(moveDef, targetPercent, attackerFacing) {
+  const { damage, angle, baseKb, kbGrowth } = moveDef;
+
+  // Step 1 — raw KB (independent of target's damage)
+  const rawKb    = baseKb + (damage * kbGrowth);
+
+  // Step 2 — scale by target's accumulated damage percentage
+  const scaledKb = rawKb * (1 + targetPercent / 100);
+
+  // Step 3 — convert angle to velocity components
+  const rad = angle * Math.PI / 180;
+  const vx  =  Math.cos(rad) * scaledKb * attackerFacing;
+  const vy  = -Math.abs(Math.sin(rad) * scaledKb);  // always launches upward for sin>0
+
+  // Step 4 — hitstun frames scale with final KB magnitude
+  const hitstunFrames = Math.floor(scaledKb * HITSTUN_SCALE);
+
+  // Step 5 — hit pause from RAW kb (keep it data-driven, not damage-dependent)
+  let hitPauseFrames = 0;
+  for (const t of HIT_PAUSE_THRESHOLDS) {
+    if (rawKb >= t.minKb) { hitPauseFrames = t.frames; break; }
+  }
+
+  return { vx, vy, hitstunFrames, hitPauseFrames, scaledKb, rawKb };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HIT EVENT
+//  Immutable record created by resolveHitboxes() and applied
+//  after all collision checks are done in the same tick.
+//  This prevents order-of-iteration artifacts (e.g. fighter A
+//  hitting fighter B mutating B's state before B's hitbox is
+//  checked against A's hurtbox).
+// ═══════════════════════════════════════════════════════════
+class HitEvent {
+  constructor(attacker, defender, moveDef, kbResult) {
+    this.attacker  = attacker;
+    this.defender  = defender;
+    this.moveDef   = moveDef;
+    this.kbResult  = kbResult;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SHIELD
+//  Tracks health, break state, stun, cooldown, and regeneration.
+//  Lives on each Fighter as fighter.shield.
+//
+//  Health model:
+//    - Drains passively while held (prevents infinite shielding)
+//    - Drains by hit damage when absorbing an attack
+//    - Regenerates automatically while not held (up to SHIELD_MAX)
+//    - At 0 HP → shield breaks, fighter enters SHIELDBREAK stun
+//
+//  Size: the rendered bubble radius scales with health so players
+//  can visually read how much shield remains.
+// ═══════════════════════════════════════════════════════════
+class Shield {
+  constructor() {
+    this.hp          = SHIELD_MAX;
+    this.broken      = false;       // true while broken and not yet fully regenerated
+    this.stunLeft    = 0;           // frames of shield-stun remaining
+    this.cooldown    = 0;           // frames before shield can be raised again
+    this.regenDelay  = 0;           // frames before regen starts after last hit
+  }
+
+  // Fraction 0–1 representing current health
+  get fraction() { return Math.max(0, this.hp / SHIELD_MAX); }
+
+  // Radius of the shield bubble in pixels (scales with health)
+  bubbleRadius(fighter) {
+    const base = Math.max(fighter.w, fighter.h) * 0.72;
+    return base * (SHIELD_MIN_SIZE + (1 - SHIELD_MIN_SIZE) * this.fraction);
+  }
+
+  // Called every frame
+  tick(isHeld) {
+    if (this.stunLeft  > 0) this.stunLeft--;
+    if (this.cooldown  > 0) this.cooldown--;
+    if (this.regenDelay> 0) { this.regenDelay--; return; }
+
+    if (this.broken) {
+      // Regen while broken — once full, un-break
+      this.hp = Math.min(SHIELD_MAX, this.hp + SHIELD_REGEN_RATE * 2);
+      if (this.hp >= SHIELD_MAX) { this.hp = SHIELD_MAX; this.broken = false; }
+    } else if (isHeld) {
+      // Passive drain while holding
+      this.hp = Math.max(0, this.hp - SHIELD_PASSIVE_DRAIN);
+    } else {
+      // Regen when not held
+      this.hp = Math.min(SHIELD_MAX, this.hp + SHIELD_REGEN_RATE);
+    }
+  }
+
+  // Absorb a hit. Returns true if shield breaks.
+  absorbHit(damage) {
+    this.hp       -= damage;
+    this.regenDelay = 90;     // 1.5s delay before regen
+    this.stunLeft   = Math.ceil(SHIELD_STUN_BASE + damage * SHIELD_STUN_PER_DMG);
+    if (this.hp <= 0) {
+      this.hp      = 0;
+      this.broken  = true;
+      this.cooldown= SHIELD_BREAK_STUN + 60; // long cooldown post-break
+      return true;
+    }
+    return false;
+  }
+
+  // Can the shield be raised right now?
+  canRaise() { return !this.broken && this.cooldown === 0 && this.hp > 2; }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  LEDGE
+//  A snap point at the corner of a platform.
+//  Fighters near the edge while moving toward it will snap and hang.
+//
+//  Each Ledge is defined by:
+//    x, y   — the exact corner pixel
+//    facing — which direction you face when hanging (+1 = right ledge, -1 = left ledge)
+//    holder — the Fighter currently occupying it (only one per ledge)
+// ═══════════════════════════════════════════════════════════
+class Ledge {
+  constructor(x, y, facing) {
+    this.x      = x;
+    this.y      = y;
+    this.facing = facing;  // +1 = right side of a platform, -1 = left side
+    this.holder = null;    // Fighter | null
+  }
+
+  isFree()  { return this.holder === null; }
+
+  occupy(fighter) {
+    this.holder = fighter;
+    fighter.ledge = this;
+  }
+
+  release() {
+    if (this.holder) { this.holder.ledge = null; }
+    this.holder = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MOVE DATA SCHEMA
+//
+//  id            {string}   unique identifier
+//  aerial        {bool}     true = air-only, false = ground-only
+//  startup       {int}      frames before hitbox appears
+//  active        {int}      frames hitbox is live
+//  endlag        {int}      recovery frames after active window
+//  landLag       {int}      frames of landing lag if aerial touches ground
+//  damage        {number}   % damage dealt on hit
+//  angle         {number}   launch angle degrees (0=right, 90=up, 180=left, 270=down)
+//  baseKb        {number}   base knockback (see computeKnockback)
+//  kbGrowth      {number}   knockback scaling per 1% damage dealt
+//  hitbox        {object}   { ox, oy, w, h } — facing-relative offset from fighter cx/top
+//  hurtboxMod    {object|null} optional per-move hurtbox override { ox, oy, w, h }
+//  sfxColor      {string}   hitbox glow / flash colour
+//  locksMovement {bool}     freeze vx during startup+active
+// ═══════════════════════════════════════════════════════════
+const MOVESETS = {
+
+  // ──────────────────── BLAZE ────────────────────
+  BLAZE: {
+    jab: {
+      id:'jab', aerial:false,
+      startup:3, active:4, endlag:8, landLag:0,
+      damage:3, angle:30, baseKb:120, kbGrowth:4,
+      hitbox:{ ox:10, oy:4, w:32, h:22 }, hurtboxMod:null,
+      sfxColor:'#ffee00', locksMovement:false,
+    },
+    ftilt: {
+      id:'ftilt', aerial:false,
+      startup:7, active:5, endlag:14, landLag:0,
+      damage:8, angle:25, baseKb:200, kbGrowth:9,
+      hitbox:{ ox:14, oy:8, w:44, h:28 }, hurtboxMod:null,
+      sfxColor:'#ff8800', locksMovement:false,
+    },
+    utilt: {
+      id:'utilt', aerial:false,
+      startup:6, active:6, endlag:12, landLag:0,
+      damage:7, angle:88, baseKb:180, kbGrowth:8,
+      hitbox:{ ox:-4, oy:-34, w:44, h:36 }, hurtboxMod:null,
+      sfxColor:'#ff4488', locksMovement:false,
+    },
+    dtilt: {
+      id:'dtilt', aerial:false,
+      startup:5, active:4, endlag:10, landLag:0,
+      damage:6, angle:15, baseKb:140, kbGrowth:7,
+      hitbox:{ ox:8, oy:28, w:40, h:20 },
+      // crouch shrinks hurtbox during dtilt
+      hurtboxMod:{ ox:0, oy:16, w:36, h:36 },
+      sfxColor:'#44ffaa', locksMovement:false,
+    },
+    fair: {
+      id:'fair', aerial:true,
+      startup:8, active:6, endlag:16, landLag:12,
+      damage:10, angle:20, baseKb:220, kbGrowth:10,
+      hitbox:{ ox:14, oy:2, w:46, h:32 }, hurtboxMod:null,
+      sfxColor:'#ff2244', locksMovement:false,
+    },
+    uair: {
+      id:'uair', aerial:true,
+      startup:7, active:7, endlag:14, landLag:10,
+      damage:9, angle:82, baseKb:200, kbGrowth:9,
+      hitbox:{ ox:-8, oy:-40, w:52, h:40 }, hurtboxMod:null,
+      sfxColor:'#cc44ff', locksMovement:false,
+    },
+    dair: {
+      id:'dair', aerial:true,
+      startup:10, active:8, endlag:18, landLag:20,
+      damage:12, angle:270, baseKb:260, kbGrowth:8,
+      hitbox:{ ox:-6, oy:38, w:48, h:30 }, hurtboxMod:null,
+      sfxColor:'#00eeff', locksMovement:true,
+    },
+  },
+
+  // ──────────────────── FROST ────────────────────
+  FROST: {
+    jab: {
+      id:'jab', aerial:false,
+      startup:4, active:3, endlag:10, landLag:0,
+      damage:4, angle:45, baseKb:100, kbGrowth:5,
+      hitbox:{ ox:12, oy:6, w:30, h:24 }, hurtboxMod:null,
+      sfxColor:'#ffee00', locksMovement:false,
+    },
+    ftilt: {
+      id:'ftilt', aerial:false,
+      startup:9, active:6, endlag:16, landLag:0,
+      damage:10, angle:35, baseKb:240, kbGrowth:10,
+      hitbox:{ ox:16, oy:4, w:50, h:32 }, hurtboxMod:null,
+      sfxColor:'#ff8800', locksMovement:true,
+    },
+    utilt: {
+      id:'utilt', aerial:false,
+      startup:5, active:8, endlag:10, landLag:0,
+      damage:6, angle:90, baseKb:160, kbGrowth:7,
+      hitbox:{ ox:-6, oy:-38, w:52, h:40 }, hurtboxMod:null,
+      sfxColor:'#ff4488', locksMovement:false,
+    },
+    dtilt: {
+      id:'dtilt', aerial:false,
+      startup:4, active:5, endlag:8, landLag:0,
+      damage:5, angle:10, baseKb:120, kbGrowth:6,
+      hitbox:{ ox:10, oy:32, w:44, h:18 },
+      hurtboxMod:{ ox:0, oy:14, w:40, h:34 },
+      sfxColor:'#44ffaa', locksMovement:false,
+    },
+    fair: {
+      id:'fair', aerial:true,
+      startup:6, active:5, endlag:18, landLag:14,
+      damage:9, angle:15, baseKb:200, kbGrowth:9,
+      hitbox:{ ox:16, oy:6, w:42, h:28 }, hurtboxMod:null,
+      sfxColor:'#ff2244', locksMovement:false,
+    },
+    uair: {
+      id:'uair', aerial:true,
+      startup:9, active:9, endlag:12, landLag:8,
+      damage:11, angle:85, baseKb:220, kbGrowth:11,
+      hitbox:{ ox:-10, oy:-44, w:60, h:44 }, hurtboxMod:null,
+      sfxColor:'#cc44ff', locksMovement:false,
+    },
+    dair: {
+      id:'dair', aerial:true,
+      startup:8, active:10, endlag:14, landLag:16,
+      damage:8, angle:260, baseKb:180, kbGrowth:7,
+      hitbox:{ ox:-4, oy:34, w:48, h:28 }, hurtboxMod:null,
+      sfxColor:'#00eeff', locksMovement:true,
+    },
+  },
+
+  // ╔═══════════════════════════════════════════════════════╗
+  // ║  BLADE — Balanced Swordfighter                        ║
+  // ║  Philosophy: moderate frame data, disjointed range,   ║
+  // ║  strong edgeguarding, reliable KO options at mid-%.   ║
+  // ║  Frame legend: startup | active | endlag              ║
+  // ╚═══════════════════════════════════════════════════════╝
+  BLADE: {
+
+    // ── GROUND MOVES ─────────────────────────────────────
+
+    // Jab — quick two-hit poke. Low commitment, safe on block.
+    // startup 4 | active 3 | endlag 9  → total 16f
+    jab: {
+      id:'jab', aerial:false,
+      startup:4, active:3, endlag:9, landLag:0,
+      damage:5, angle:35, baseKb:100, kbGrowth:5,
+      hitbox:{ ox:16, oy:2, w:44, h:20 }, hurtboxMod:null,
+      sfxColor:'#c8e0ff', locksMovement:false,
+    },
+
+    // Forward Tilt — mid-range horizontal slash. Combo starter at low %.
+    // startup 8 | active 5 | endlag 13 → total 26f
+    ftilt: {
+      id:'ftilt', aerial:false,
+      startup:8, active:5, endlag:13, landLag:0,
+      damage:10, angle:28, baseKb:170, kbGrowth:9,
+      hitbox:{ ox:18, oy:0, w:54, h:30 }, hurtboxMod:null,
+      sfxColor:'#88ccff', locksMovement:false,
+    },
+
+    // Up Tilt — upward arc sweep. Anti-air, juggle tool.
+    // startup 7 | active 6 | endlag 11 → total 24f
+    utilt: {
+      id:'utilt', aerial:false,
+      startup:7, active:6, endlag:11, landLag:0,
+      damage:9, angle:86, baseKb:160, kbGrowth:8,
+      hitbox:{ ox:-2, oy:-38, w:48, h:42 }, hurtboxMod:null,
+      sfxColor:'#aaddff', locksMovement:false,
+    },
+
+    // Down Tilt — low sweeping stab. Trips at low %, launches at high %.
+    // startup 6 | active 4 | endlag 12 → total 22f
+    dtilt: {
+      id:'dtilt', aerial:false,
+      startup:6, active:4, endlag:12, landLag:0,
+      damage:8, angle:18, baseKb:140, kbGrowth:7,
+      hitbox:{ ox:14, oy:26, w:48, h:22 },
+      hurtboxMod:{ ox:0, oy:14, w:36, h:38 },
+      sfxColor:'#66bbff', locksMovement:false,
+    },
+
+    // Forward Smash — lunging overhead cleave. Premier KO move.
+    // startup 16 | active 4 | endlag 22 → total 42f  (slow, punishable)
+    fsmash: {
+      id:'fsmash', aerial:false,
+      startup:16, active:4, endlag:22, landLag:0,
+      damage:17, angle:32, baseKb:310, kbGrowth:13,
+      hitbox:{ ox:20, oy:-8, w:60, h:44 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true,
+    },
+
+    // ── AERIALS ──────────────────────────────────────────
+
+    // Neutral Air — spinning blade. Multi-directional, safe landing option.
+    // startup 6 | active 10 | endlag 12 | landLag 8
+    nair: {
+      id:'nair', aerial:true,
+      startup:6, active:10, endlag:12, landLag:8,
+      damage:8, angle:45, baseKb:150, kbGrowth:8,
+      hitbox:{ ox:0, oy:0, w:52, h:52 }, hurtboxMod:null,
+      sfxColor:'#c8e0ff', locksMovement:false,
+    },
+
+    // Forward Air — horizontal swipe. Strong edgeguard tool, low endlag.
+    // startup 9 | active 5 | endlag 14 | landLag 10
+    fair: {
+      id:'fair', aerial:true,
+      startup:9, active:5, endlag:14, landLag:10,
+      damage:12, angle:22, baseKb:210, kbGrowth:10,
+      hitbox:{ ox:18, oy:4, w:50, h:28 }, hurtboxMod:null,
+      sfxColor:'#88ccff', locksMovement:false,
+    },
+
+    // Back Air — quick reverse slash. Fast, strong, KO potential near ledge.
+    // startup 7 | active 4 | endlag 13 | landLag 9
+    bair: {
+      id:'bair', aerial:true,
+      startup:7, active:4, endlag:13, landLag:9,
+      damage:13, angle:155, baseKb:230, kbGrowth:11,
+      hitbox:{ ox:-20, oy:2, w:48, h:26 }, hurtboxMod:null,
+      sfxColor:'#aaddff', locksMovement:false,
+    },
+
+    // Up Air — upward thrust. Juggle and ceiling KO tool.
+    // startup 8 | active 6 | endlag 12 | landLag 8
+    uair: {
+      id:'uair', aerial:true,
+      startup:8, active:6, endlag:12, landLag:8,
+      damage:11, angle:84, baseKb:190, kbGrowth:10,
+      hitbox:{ ox:-4, oy:-42, w:46, h:44 }, hurtboxMod:null,
+      sfxColor:'#66ddff', locksMovement:false,
+    },
+
+    // Down Air — SPIKE. Downward plunge, stalls then plunges. High risk/reward.
+    // startup 14 | active 6 | endlag 18 | landLag 22
+    dair: {
+      id:'dair', aerial:true,
+      startup:14, active:6, endlag:18, landLag:22,
+      damage:14, angle:270, baseKb:280, kbGrowth:9,
+      hitbox:{ ox:-4, oy:36, w:44, h:32 }, hurtboxMod:null,
+      sfxColor:'#ff4488', locksMovement:true,
+    },
+
+    // ── SPECIALS ─────────────────────────────────────────
+    // Stored in moveset but require special dispatch logic (not auto-wired yet).
+    // Frame data is complete so they can be activated via future special input.
+
+    // Neutral Special — Blade Beam. Projectile (placeholder hitbox as thrown blade).
+    // startup 18 | active 30 | endlag 20
+    neutralSpecial: {
+      id:'neutralSpecial', aerial:false,
+      startup:18, active:30, endlag:20, landLag:0,
+      damage:7, angle:10, baseKb:130, kbGrowth:6,
+      hitbox:{ ox:30, oy:8, w:36, h:16 }, hurtboxMod:null,
+      sfxColor:'#44ffff', locksMovement:true,
+    },
+
+    // Side Special — Dash Slash. Lunging attack with forward momentum.
+    // startup 10 | active 6 | endlag 16
+    sideSpecial: {
+      id:'sideSpecial', aerial:false,
+      startup:10, active:6, endlag:16, landLag:12,
+      damage:11, angle:30, baseKb:200, kbGrowth:9,
+      hitbox:{ ox:22, oy:-4, w:52, h:36 }, hurtboxMod:null,
+      sfxColor:'#aaffee', locksMovement:false,
+    },
+
+    // Up Special — Rising Blade. Recovery move, vertical launch.
+    // startup 5 | active 8 | endlag 30 (high endlag = punishable off-stage)
+    upSpecial: {
+      id:'upSpecial', aerial:true,
+      startup:5, active:8, endlag:30, landLag:24,
+      damage:9, angle:82, baseKb:180, kbGrowth:7,
+      hitbox:{ ox:-2, oy:-44, w:40, h:48 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true,
+    },
+
+    // Down Special — Counter Stance. Placeholder active window = parry window.
+    // startup 4 | active 20 | endlag 22
+    downSpecial: {
+      id:'downSpecial', aerial:false,
+      startup:4, active:20, endlag:22, landLag:0,
+      damage:14, angle:60, baseKb:220, kbGrowth:10,
+      hitbox:{ ox:0, oy:0, w:36, h:52 }, hurtboxMod:null,
+      sfxColor:'#ffaaff', locksMovement:true,
+    },
+
+    // ── GRAB + THROWS ────────────────────────────────────
+    // Grabs have damage:0, baseKb:0 (engine skips KB for grab moves).
+    // Throws defined as separate moves triggered by engine grab state (future).
+
+    // Grab — standing grab reach.
+    // startup 7 | active 3 | endlag 14
+    grab: {
+      id:'grab', aerial:false,
+      startup:7, active:3, endlag:14, landLag:0,
+      damage:0, angle:0, baseKb:0, kbGrowth:0,
+      hitbox:{ ox:14, oy:4, w:36, h:24 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true,
+    },
+
+    // Forward Throw — standard launch.
+    fthrow: {
+      id:'fthrow', aerial:false,
+      startup:2, active:1, endlag:16, landLag:0,
+      damage:9, angle:30, baseKb:190, kbGrowth:8,
+      hitbox:{ ox:12, oy:4, w:36, h:28 }, hurtboxMod:null,
+      sfxColor:'#88ccff', locksMovement:true,
+    },
+
+    // Back Throw — strong horizontal KO throw near ledge.
+    bthrow: {
+      id:'bthrow', aerial:false,
+      startup:3, active:1, endlag:18, landLag:0,
+      damage:11, angle:155, baseKb:230, kbGrowth:10,
+      hitbox:{ ox:-12, oy:4, w:36, h:28 }, hurtboxMod:null,
+      sfxColor:'#aaddff', locksMovement:true,
+    },
+
+    // Up Throw — juggle throw, sets up aerial combos.
+    uthrow: {
+      id:'uthrow', aerial:false,
+      startup:3, active:1, endlag:20, landLag:0,
+      damage:8, angle:90, baseKb:170, kbGrowth:9,
+      hitbox:{ ox:0, oy:-16, w:36, h:28 }, hurtboxMod:null,
+      sfxColor:'#66ddff', locksMovement:true,
+    },
+
+    // Down Throw — combo throw at low %, tech-chase at high %.
+    dthrow: {
+      id:'dthrow', aerial:false,
+      startup:2, active:1, endlag:22, landLag:0,
+      damage:7, angle:75, baseKb:130, kbGrowth:7,
+      hitbox:{ ox:0, oy:20, w:36, h:24 }, hurtboxMod:null,
+      sfxColor:'#44ffaa', locksMovement:true,
+    },
+  },
+
+  // ╔═══════════════════════════════════════════════════════╗
+  // ║  GRUNT — Heavy Melee Brawler                          ║
+  // ║  Philosophy: slow startup & high endlag on everything,║
+  // ║  massive base knockback, large body + large hitboxes, ║
+  // ║  can KO extremely early. Limited aerial game.         ║
+  // ╚═══════════════════════════════════════════════════════╝
+  GRUNT: {
+
+    // ── GROUND MOVES ─────────────────────────────────────
+
+    // Jab — haymaker. Slow but hurts even on jab.
+    // startup 9 | active 3 | endlag 16 → total 28f
+    jab: {
+      id:'jab', aerial:false,
+      startup:9, active:3, endlag:16, landLag:0,
+      damage:8, angle:25, baseKb:190, kbGrowth:6,
+      hitbox:{ ox:16, oy:2, w:40, h:26 }, hurtboxMod:null,
+      sfxColor:'#ff9900', locksMovement:false,
+    },
+
+    // Forward Tilt — wide horizontal swing. Kills at 80%+.
+    // startup 14 | active 5 | endlag 20 → total 39f
+    ftilt: {
+      id:'ftilt', aerial:false,
+      startup:14, active:5, endlag:20, landLag:0,
+      damage:14, angle:28, baseKb:290, kbGrowth:11,
+      hitbox:{ ox:18, oy:-2, w:58, h:36 }, hurtboxMod:null,
+      sfxColor:'#ff6600', locksMovement:false,
+    },
+
+    // Up Tilt — overhead slam. Kills vertically at 90%+.
+    // startup 12 | active 6 | endlag 18 → total 36f
+    utilt: {
+      id:'utilt', aerial:false,
+      startup:12, active:6, endlag:18, landLag:0,
+      damage:13, angle:90, baseKb:270, kbGrowth:10,
+      hitbox:{ ox:-6, oy:-42, w:60, h:44 }, hurtboxMod:null,
+      sfxColor:'#ffaa00', locksMovement:true,
+    },
+
+    // Down Tilt — ground pound crouch. Low angle, good for edge kills.
+    // startup 10 | active 5 | endlag 15 → total 30f
+    dtilt: {
+      id:'dtilt', aerial:false,
+      startup:10, active:5, endlag:15, landLag:0,
+      damage:11, angle:12, baseKb:220, kbGrowth:9,
+      hitbox:{ ox:12, oy:28, w:52, h:24 },
+      hurtboxMod:{ ox:0, oy:18, w:48, h:34 },
+      sfxColor:'#cc6600', locksMovement:false,
+    },
+
+    // Forward Smash — full-body lunge. Earliest KO tool in the game.
+    // startup 22 | active 4 | endlag 28 → total 54f  (very punishable)
+    fsmash: {
+      id:'fsmash', aerial:false,
+      startup:22, active:4, endlag:28, landLag:0,
+      damage:22, angle:30, baseKb:420, kbGrowth:14,
+      hitbox:{ ox:22, oy:-10, w:68, h:50 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true,
+    },
+
+    // ── AERIALS ──────────────────────────────────────────
+
+    // Neutral Air — body check. Simple, covers all sides.
+    // startup 12 | active 8 | endlag 20 | landLag 16
+    nair: {
+      id:'nair', aerial:true,
+      startup:12, active:8, endlag:20, landLag:16,
+      damage:12, angle:40, baseKb:220, kbGrowth:9,
+      hitbox:{ ox:0, oy:0, w:56, h:56 }, hurtboxMod:null,
+      sfxColor:'#ff9900', locksMovement:false,
+    },
+
+    // Forward Air — hammer fist. Very slow, kills on hit.
+    // startup 18 | active 5 | endlag 22 | landLag 18
+    fair: {
+      id:'fair', aerial:true,
+      startup:18, active:5, endlag:22, landLag:18,
+      damage:16, angle:25, baseKb:300, kbGrowth:12,
+      hitbox:{ ox:18, oy:6, w:54, h:36 }, hurtboxMod:null,
+      sfxColor:'#ff6600', locksMovement:true,
+    },
+
+    // Back Air — elbow smash. Fastest aerial, still slow overall.
+    // startup 14 | active 5 | endlag 16 | landLag 12
+    bair: {
+      id:'bair', aerial:true,
+      startup:14, active:5, endlag:16, landLag:12,
+      damage:14, angle:150, baseKb:260, kbGrowth:11,
+      hitbox:{ ox:-18, oy:4, w:50, h:32 }, hurtboxMod:null,
+      sfxColor:'#ffaa00', locksMovement:false,
+    },
+
+    // Up Air — headbutt upward. Vertical KO near top blast zone.
+    // startup 16 | active 6 | endlag 18 | landLag 14
+    uair: {
+      id:'uair', aerial:true,
+      startup:16, active:6, endlag:18, landLag:14,
+      damage:15, angle:88, baseKb:280, kbGrowth:11,
+      hitbox:{ ox:-4, oy:-44, w:56, h:46 }, hurtboxMod:null,
+      sfxColor:'#ffcc00', locksMovement:true,
+    },
+
+    // Down Air — SPIKE. Meteor crash — devastating but very slow.
+    // startup 20 | active 6 | endlag 24 | landLag 28
+    dair: {
+      id:'dair', aerial:true,
+      startup:20, active:6, endlag:24, landLag:28,
+      damage:18, angle:270, baseKb:360, kbGrowth:10,
+      hitbox:{ ox:-6, oy:40, w:56, h:36 }, hurtboxMod:null,
+      sfxColor:'#ff2200', locksMovement:true,
+    },
+
+    // ── SPECIALS ─────────────────────────────────────────
+
+    // Neutral Special — Ground Slam charge. High damage, high endlag.
+    // startup 24 | active 6 | endlag 30
+    neutralSpecial: {
+      id:'neutralSpecial', aerial:false,
+      startup:24, active:6, endlag:30, landLag:0,
+      damage:20, angle:80, baseKb:380, kbGrowth:12,
+      hitbox:{ ox:-8, oy:20, w:64, h:32 }, hurtboxMod:null,
+      sfxColor:'#ff4400', locksMovement:true,
+    },
+
+    // Side Special — Bull Rush. Armoured horizontal charge.
+    // startup 14 | active 12 | endlag 20
+    sideSpecial: {
+      id:'sideSpecial', aerial:false,
+      startup:14, active:12, endlag:20, landLag:16,
+      damage:13, angle:20, baseKb:240, kbGrowth:9,
+      hitbox:{ ox:20, oy:0, w:56, h:48 }, hurtboxMod:null,
+      sfxColor:'#ff8800', locksMovement:false,
+    },
+
+    // Up Special — Rocket Jump. Damages below, poor recovery distance.
+    // startup 10 | active 10 | endlag 32
+    upSpecial: {
+      id:'upSpecial', aerial:true,
+      startup:10, active:10, endlag:32, landLag:26,
+      damage:12, angle:270, baseKb:200, kbGrowth:6,
+      hitbox:{ ox:-4, oy:24, w:56, h:40 }, hurtboxMod:null,
+      sfxColor:'#ffcc00', locksMovement:true,
+    },
+
+    // Down Special — Earthquake. Hits both sides at ground level.
+    // startup 18 | active 14 | endlag 24
+    downSpecial: {
+      id:'downSpecial', aerial:false,
+      startup:18, active:14, endlag:24, landLag:0,
+      damage:15, angle:50, baseKb:260, kbGrowth:10,
+      hitbox:{ ox:-30, oy:24, w:108, h:24 }, hurtboxMod:null,
+      sfxColor:'#ff6600', locksMovement:true,
+    },
+
+    // ── GRAB + THROWS ────────────────────────────────────
+
+    // Grab — slow but huge reach.
+    // startup 10 | active 4 | endlag 18
+    grab: {
+      id:'grab', aerial:false,
+      startup:10, active:4, endlag:18, landLag:0,
+      damage:0, angle:0, baseKb:0, kbGrowth:0,
+      hitbox:{ ox:14, oy:2, w:44, h:28 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true,
+    },
+
+    // Forward Throw — power toss, direct KO threat near ledge.
+    fthrow: {
+      id:'fthrow', aerial:false,
+      startup:3, active:1, endlag:20, landLag:0,
+      damage:13, angle:30, baseKb:290, kbGrowth:10,
+      hitbox:{ ox:14, oy:4, w:44, h:32 }, hurtboxMod:null,
+      sfxColor:'#ff9900', locksMovement:true,
+    },
+
+    // Back Throw — spinning toss, highest raw throw KB.
+    bthrow: {
+      id:'bthrow', aerial:false,
+      startup:4, active:1, endlag:22, landLag:0,
+      damage:15, angle:160, baseKb:320, kbGrowth:11,
+      hitbox:{ ox:-14, oy:4, w:44, h:32 }, hurtboxMod:null,
+      sfxColor:'#ffaa00', locksMovement:true,
+    },
+
+    // Up Throw — catapult into ceiling, combo extension.
+    uthrow: {
+      id:'uthrow', aerial:false,
+      startup:4, active:1, endlag:24, landLag:0,
+      damage:10, angle:90, baseKb:230, kbGrowth:10,
+      hitbox:{ ox:0, oy:-20, w:44, h:32 }, hurtboxMod:null,
+      sfxColor:'#ffcc00', locksMovement:true,
+    },
+
+    // Down Throw — pile-driver. Combo starter at low %, kills at very high %.
+    dthrow: {
+      id:'dthrow', aerial:false,
+      startup:4, active:1, endlag:26, landLag:0,
+      damage:12, angle:78, baseKb:180, kbGrowth:9,
+      hitbox:{ ox:0, oy:24, w:44, h:32 }, hurtboxMod:null,
+      sfxColor:'#ff6600', locksMovement:true,
+    },
+  },
+
+  // ╔═══════════════════════════════════════════════════════╗
+  // ║  VEX — Lightweight Ranged Zoner                       ║
+  // ║  Philosophy: very fast moves, low knockback,          ║
+  // ║  excellent projectile space control, poor close-range, ║
+  // ║  kills late (110-130%+). Tiny hurtbox. High air speed.║
+  // ╚═══════════════════════════════════════════════════════╝
+  VEX: {
+
+    // ── GROUND MOVES ─────────────────────────────────────
+
+    // Jab — lightning-fast stab. Best OOS option, very low damage.
+    // startup 2 | active 3 | endlag 6 → total 11f
+    jab: {
+      id:'jab', aerial:false,
+      startup:2, active:3, endlag:6, landLag:0,
+      damage:2, angle:20, baseKb:60, kbGrowth:3,
+      hitbox:{ ox:12, oy:6, w:28, h:16 }, hurtboxMod:null,
+      sfxColor:'#aaff88', locksMovement:false,
+    },
+
+    // Forward Tilt — extending arm zap. Long range, weak knockback.
+    // startup 6 | active 6 | endlag 10 → total 22f
+    ftilt: {
+      id:'ftilt', aerial:false,
+      startup:6, active:6, endlag:10, landLag:0,
+      damage:7, angle:20, baseKb:100, kbGrowth:6,
+      hitbox:{ ox:20, oy:4, w:56, h:20 }, hurtboxMod:null,
+      sfxColor:'#88ff44', locksMovement:false,
+    },
+
+    // Up Tilt — quick upward shot. Fast anti-air, links to aerials.
+    // startup 5 | active 5 | endlag 9 → total 19f
+    utilt: {
+      id:'utilt', aerial:false,
+      startup:5, active:5, endlag:9, landLag:0,
+      damage:6, angle:85, baseKb:100, kbGrowth:5,
+      hitbox:{ ox:-2, oy:-30, w:36, h:34 }, hurtboxMod:null,
+      sfxColor:'#ccff44', locksMovement:false,
+    },
+
+    // Down Tilt — low-profile shot. Hits very low, good approach counter.
+    // startup 4 | active 5 | endlag 8 → total 17f
+    dtilt: {
+      id:'dtilt', aerial:false,
+      startup:4, active:5, endlag:8, landLag:0,
+      damage:5, angle:10, baseKb:80, kbGrowth:4,
+      hitbox:{ ox:14, oy:26, w:48, h:16 },
+      hurtboxMod:{ ox:2, oy:18, w:28, h:28 },
+      sfxColor:'#88ffcc', locksMovement:false,
+    },
+
+    // Forward Smash — charged energy blast. KO move, telegraphed.
+    // startup 14 | active 8 | endlag 18 → total 40f
+    fsmash: {
+      id:'fsmash', aerial:false,
+      startup:14, active:8, endlag:18, landLag:0,
+      damage:13, angle:15, baseKb:240, kbGrowth:10,
+      hitbox:{ ox:22, oy:2, w:62, h:24 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true,
+    },
+
+    // ── AERIALS ──────────────────────────────────────────
+
+    // Neutral Air — spinning burst. Decent coverage, safe on landing.
+    // startup 5 | active 12 | endlag 9 | landLag 6
+    nair: {
+      id:'nair', aerial:true,
+      startup:5, active:12, endlag:9, landLag:6,
+      damage:6, angle:50, baseKb:100, kbGrowth:5,
+      hitbox:{ ox:0, oy:0, w:40, h:40 }, hurtboxMod:null,
+      sfxColor:'#aaff88', locksMovement:false,
+    },
+
+    // Forward Air — arcing beam shot. Long active window, chains off zoning.
+    // startup 7 | active 8 | endlag 10 | landLag 7
+    fair: {
+      id:'fair', aerial:true,
+      startup:7, active:8, endlag:10, landLag:7,
+      damage:8, angle:18, baseKb:130, kbGrowth:6,
+      hitbox:{ ox:18, oy:4, w:52, h:22 }, hurtboxMod:null,
+      sfxColor:'#88ff44', locksMovement:false,
+    },
+
+    // Back Air — reverse kick. Solid knockback for a zoner, edgeguard tool.
+    // startup 6 | active 5 | endlag 11 | landLag 8
+    bair: {
+      id:'bair', aerial:true,
+      startup:6, active:5, endlag:11, landLag:8,
+      damage:10, angle:160, baseKb:160, kbGrowth:8,
+      hitbox:{ ox:-18, oy:6, w:40, h:24 }, hurtboxMod:null,
+      sfxColor:'#ccff44', locksMovement:false,
+    },
+
+    // Up Air — upward energy pulse. Juggle tool, weak but fast.
+    // startup 5 | active 7 | endlag 8 | landLag 5
+    uair: {
+      id:'uair', aerial:true,
+      startup:5, active:7, endlag:8, landLag:5,
+      damage:7, angle:84, baseKb:110, kbGrowth:6,
+      hitbox:{ ox:-4, oy:-36, w:40, h:36 }, hurtboxMod:null,
+      sfxColor:'#88ffcc', locksMovement:false,
+    },
+
+    // Down Air — SPIKE. Concentrated beam shot downward.
+    // Small hitbox, requires precise aim. Fast startup for a spike.
+    // startup 10 | active 4 | endlag 14 | landLag 16
+    dair: {
+      id:'dair', aerial:true,
+      startup:10, active:4, endlag:14, landLag:16,
+      damage:11, angle:270, baseKb:200, kbGrowth:7,
+      hitbox:{ ox:-2, oy:30, w:28, h:28 }, hurtboxMod:null,
+      sfxColor:'#44ffcc', locksMovement:true,
+    },
+
+    // ── SPECIALS ─────────────────────────────────────────
+
+    // Neutral Special — Homing Orb. Slow-moving projectile (large active window).
+    // startup 12 | active 40 | endlag 14
+    neutralSpecial: {
+      id:'neutralSpecial', aerial:false,
+      startup:12, active:40, endlag:14, landLag:0,
+      damage:6, angle:10, baseKb:90, kbGrowth:5,
+      hitbox:{ ox:28, oy:8, w:24, h:20 }, hurtboxMod:null,
+      sfxColor:'#44ff88', locksMovement:false,
+    },
+
+    // Side Special — Dash Burst. Quick teleport-dash with trailing hitbox.
+    // startup 6 | active 4 | endlag 12
+    sideSpecial: {
+      id:'sideSpecial', aerial:false,
+      startup:6, active:4, endlag:12, landLag:8,
+      damage:7, angle:30, baseKb:110, kbGrowth:5,
+      hitbox:{ ox:16, oy:2, w:44, h:28 }, hurtboxMod:null,
+      sfxColor:'#aaffcc', locksMovement:false,
+    },
+
+    // Up Special — Boost Jet. Fast vertical recovery, weak hitbox on ascent.
+    // startup 4 | active 14 | endlag 22
+    upSpecial: {
+      id:'upSpecial', aerial:true,
+      startup:4, active:14, endlag:22, landLag:14,
+      damage:5, angle:88, baseKb:100, kbGrowth:4,
+      hitbox:{ ox:-2, oy:-36, w:32, h:50 }, hurtboxMod:null,
+      sfxColor:'#ccffaa', locksMovement:true,
+    },
+
+    // Down Special — Mine Drop. Deploys stationary hitbox (simulated via long active).
+    // startup 8 | active 50 | endlag 10
+    downSpecial: {
+      id:'downSpecial', aerial:false,
+      startup:8, active:50, endlag:10, landLag:0,
+      damage:9, angle:55, baseKb:120, kbGrowth:6,
+      hitbox:{ ox:0, oy:28, w:28, h:20 }, hurtboxMod:null,
+      sfxColor:'#ffff44', locksMovement:false,
+    },
+
+    // ── GRAB + THROWS ────────────────────────────────────
+
+    // Grab — tether-style extended grab. Fast startup, short true active.
+    // startup 5 | active 3 | endlag 12
+    grab: {
+      id:'grab', aerial:false,
+      startup:5, active:3, endlag:12, landLag:0,
+      damage:0, angle:0, baseKb:0, kbGrowth:0,
+      hitbox:{ ox:16, oy:6, w:40, h:20 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true,
+    },
+
+    // Forward Throw — light toss. Sets up zoning pressure.
+    fthrow: {
+      id:'fthrow', aerial:false,
+      startup:2, active:1, endlag:14, landLag:0,
+      damage:6, angle:25, baseKb:130, kbGrowth:6,
+      hitbox:{ ox:12, oy:6, w:32, h:24 }, hurtboxMod:null,
+      sfxColor:'#88ff44', locksMovement:true,
+    },
+
+    // Back Throw — fling away, creates distance for re-zoning.
+    bthrow: {
+      id:'bthrow', aerial:false,
+      startup:3, active:1, endlag:14, landLag:0,
+      damage:7, angle:160, baseKb:150, kbGrowth:7,
+      hitbox:{ ox:-12, oy:6, w:32, h:24 }, hurtboxMod:null,
+      sfxColor:'#ccff44', locksMovement:true,
+    },
+
+    // Up Throw — high-angle toss. Best throw for landing aerials.
+    uthrow: {
+      id:'uthrow', aerial:false,
+      startup:3, active:1, endlag:16, landLag:0,
+      damage:5, angle:88, baseKb:120, kbGrowth:6,
+      hitbox:{ ox:0, oy:-14, w:32, h:24 }, hurtboxMod:null,
+      sfxColor:'#aaffcc', locksMovement:true,
+    },
+
+    // Down Throw — bounces opponent, low angle, combo launcher.
+    dthrow: {
+      id:'dthrow', aerial:false,
+      startup:2, active:1, endlag:18, landLag:0,
+      damage:4, angle:68, baseKb:90, kbGrowth:5,
+      hitbox:{ ox:0, oy:20, w:32, h:20 }, hurtboxMod:null,
+      sfxColor:'#88ffcc', locksMovement:true,
+    },
+  },
+};
+// ═══════════════════════════════════════════════════════════
+const FIGHTER_DEFS = {
+  BLAZE: {
+    color:'#00c8ff', shadowColor:'rgba(0,200,255,0.5)',
+    width:36, height:52,
+    groundSpeed:620, groundAccel:3800,
+    airSpeed:540,    airAccel:2200,
+    groundFrict:0.82, airFrict:0.995,
+    jumpVy:-780, dblJumpVy:-700, fastFallVy:900,
+    maxJumps:2,
+    moveset: MOVESETS.BLAZE,
+  },
+  FROST: {
+    color:'#ff6b35', shadowColor:'rgba(255,107,53,0.5)',
+    width:40, height:48,
+    groundSpeed:560, groundAccel:2800,
+    airSpeed:600,    airAccel:2800,
+    groundFrict:0.75, airFrict:0.997,
+    jumpVy:-820, dblJumpVy:-640, fastFallVy:1100,
+    maxJumps:2,
+    moveset: MOVESETS.FROST,
+  },
+
+  // ── Balanced Swordfighter ─────────────────────────────────
+  // Medium weight, medium speed. Strong disjoint range. 2 jumps.
+  // Falls at a moderate rate — not floaty, not a fastfaller.
+  BLADE: {
+    color:'#b8d4ff', shadowColor:'rgba(140,180,255,0.55)',
+    width:34, height:54,
+    groundSpeed:600, groundAccel:3400,
+    airSpeed:520,    airAccel:2000,
+    groundFrict:0.80, airFrict:0.994,
+    jumpVy:-800, dblJumpVy:-680, fastFallVy:950,
+    maxJumps:2,
+    moveset: MOVESETS.BLADE,
+  },
+
+  // ── Heavy Melee Brawler ───────────────────────────────────
+  // Heaviest fighter. Very low jump height, high fall speed (fastfaller).
+  // Groundspeed is surprisingly decent to compensate for poor air game.
+  // Single extra jump (maxJumps:2 maintained for balance; up special is recovery).
+  GRUNT: {
+    color:'#cc6622', shadowColor:'rgba(180,80,20,0.6)',
+    width:48, height:60,
+    groundSpeed:540, groundAccel:2600,
+    airSpeed:400,    airAccel:1400,
+    groundFrict:0.70, airFrict:0.990,
+    jumpVy:-660, dblJumpVy:-520, fastFallVy:1300,
+    maxJumps:2,
+    moveset: MOVESETS.GRUNT,
+  },
+
+  // ── Lightweight Ranged Zoner ──────────────────────────────
+  // Lightest fighter — dies early but floats with excellent air speed.
+  // Fast ground movement. Best air control in the roster.
+  // Tiny collision body (width:28) to match the small hurtbox design.
+  VEX: {
+    color:'#88ff44', shadowColor:'rgba(100,220,40,0.5)',
+    width:28, height:44,
+    groundSpeed:680, groundAccel:4200,
+    airSpeed:640,    airAccel:3200,
+    groundFrict:0.86, airFrict:0.998,
+    jumpVy:-840, dblJumpVy:-760, fastFallVy:780,
+    maxJumps:3,      // triple jump — adds to zoning / approach options
+    moveset: MOVESETS.VEX,
+  },
+};
+
+// ═══════════════════════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════════════════════
+const keys = {};
+window.addEventListener('keydown', e => {
+  if (!keys[e.code]) keys[e.code] = { justPressed: true };
+  else               keys[e.code].justPressed = false;
+  keys[e.code].held = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = { held:false, justPressed:false }; });
+const keyHeld = c => !!(keys[c]?.held);
+const keyJust = c => !!(keys[c]?.justPressed);
+function clearJust() { for (const k in keys) keys[k].justPressed = false; }
+
+// ═══════════════════════════════════════════════════════════
+//  PLATFORM
+// ═══════════════════════════════════════════════════════════
+class Platform {
+  constructor(x, y, w, h, isGround = false) {
+    Object.assign(this, { x, y, w, h, isGround });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FIGHTER
+// ═══════════════════════════════════════════════════════════
+class Fighter {
+  constructor(defName, x, y, controls) {
+    this.defName  = defName;
+    this.def      = FIGHTER_DEFS[defName];
+    this.controls = controls;
+
+    this.x = x; this.y = y;
+    this.vx = 0; this.vy = 0;
+
+    this.state      = State.IDLE;
+    this.stateTimer = 0;
+    this.facing     = 1;
+    this.onGround   = false;
+    this.canFastFall= false;
+    this.jumpsLeft  = this.def.maxJumps;
+
+    // Combat
+    this.damage         = 0;
+    this.hitstunLeft    = 0;
+    this.hitstunMax     = 0;
+    this.hitPauseLeft   = 0;
+
+    // Move tracking
+    this.currentMove    = null;
+    this.currentFrame   = 0;
+    this.pendingLandLag = 0;
+
+    // ── Shield ──────────────────────────────
+    this.shield         = new Shield();
+
+    // ── Roll / Air dodge ────────────────────
+    // dodgeFrame    : current frame within a roll or airdodge (1-indexed)
+    // dodgeDir      : +1 or -1, direction of roll/airdodge
+    // rollCooldown  : frames before next roll is allowed
+    // airdodgeUsed  : true after first airdodge in air; reset on landing
+    this.dodgeFrame     = 0;
+    this.dodgeDir       = 1;
+    this.rollCooldown   = 0;
+    this.airdodgeUsed   = false;
+
+    // ── Ledge ────────────────────────────────
+    // ledge         : Ledge | null — the ledge this fighter is hanging on
+    // ledgeTimer    : frames spent on this ledge (for auto-release)
+    // ledgeInvuln   : frames of invincibility remaining after snapping
+    this.ledge          = null;
+    this.ledgeTimer     = 0;
+    this.ledgeInvuln    = 0;
+
+    // ── Invincibility (shared flag for all sources) ──────
+    // invuln > 0 means hurtboxes are inactive this frame
+    this.invuln         = 0;
+
+    // ── Box collections ─────────────────────
+    // activeHitbox : Hitbox | null — single offensive box per move activation
+    // hurtboxes    : Hurtbox[]    — one or more defensive boxes
+    this.activeHitbox = null;
+    this.hurtboxes    = [
+      // Default full-body hurtbox — always present, sized from def
+      new Hurtbox(this, { ox:0, oy:0, w:this.def.width, h:this.def.height }, 'body'),
+    ];
+
+    this.w = this.def.width;
+    this.h = this.def.height;
+
+    this._flashTimer    = 0;
+    this._hitEffects    = [];  // { x,y, color, life, maxLife } cosmetic bursts
+  }
+
+  // ── Bounds (body rect) ─────────────────────
+  get left()   { return this.x; }
+  get right()  { return this.x + this.w; }
+  get top()    { return this.y; }
+  get bottom() { return this.y + this.h; }
+  get cx()     { return this.x + this.w / 2; }
+  get cy()     { return this.y + this.h / 2; }
+
+  setState(s) {
+    if (this.state === s) return;
+    this.state = s; this.stateTimer = 0;
+  }
+
+  // ── HURTBOX MANAGEMENT ────────────────────
+  refreshHurtboxes() {
+    const bodyHb = this.hurtboxes[0];
+    const mod = (this.currentMove?.hurtboxMod) || null;
+    bodyHb.def = mod
+      ? mod
+      : { ox: 0, oy: 0, w: this.def.width, h: this.def.height };
+
+    // Deactivate hurtbox during invincibility (roll, airdodge window, ledge snap)
+    bodyHb.active = (this.invuln <= 0);
+  }
+
+  // ── TRY MOVE ─────────────────────────────
+  tryMove(moveName) {
+    const move = this.def.moveset[moveName];
+    if (!move) return;
+    const inAir = !this.onGround;
+    if (move.aerial && !inAir)      return;
+    if (!move.aerial && inAir)      return;
+    if (isAttackState(this.state))  return;
+    if (this.state === State.HITSTUN || this.state === State.LANDLAG) return;
+
+    this.currentMove  = move;
+    this.currentFrame = 0;
+    this.activeHitbox = null;
+    this.setState(State.STARTUP);
+  }
+
+  // ── ABSORB HIT ON SHIELD ─────────────────
+  // Called instead of applyHit when the defender is shielding.
+  // Applies shield damage + stun; triggers break if HP reaches 0.
+  absorbOnShield(hitEvent) {
+    const { moveDef } = hitEvent;
+    const broke = this.shield.absorbHit(moveDef.damage);
+    this._spawnHitEffect(this.cx, this.cy - this.h * 0.3, '#4488ff');
+
+    if (broke) {
+      // Shield break: major knockback straight up, very long stun
+      this.vx = 0;
+      this.vy = -400;
+      this.hitstunLeft = SHIELD_BREAK_STUN;
+      this.hitstunMax  = SHIELD_BREAK_STUN;
+      this.currentMove = null; this.activeHitbox = null;
+      this.onGround    = false;
+      this.setState(State.SHIELDBREAK);
+    } else {
+      // Shield stun: brief lockout, fighter stays grounded
+      this.setState(State.SHIELDSTUN);
+    }
+    // Small hit pause on both fighters even for shielded hits
+    hitEvent.attacker.applyHitPause(2);
+    this.applyHitPause(2);
+  }
+
+  // ── LEDGE GET-UP ─────────────────────────
+  // Called when jump is pressed while on ledge, or after LEDGE_HANG_LIMIT.
+  ledgeGetUp() {
+    if (!this.ledge) return;
+    const l = this.ledge;
+    l.release();
+    // Snap position to just above the platform surface
+    this.x       = l.facing === 1 ? l.x - this.w : l.x;
+    this.y       = l.y - this.h;
+    this.vx      = 0; this.vy = 0;
+    this.onGround= true;
+    this.facing  = -l.facing; // face inward onto the stage
+    this.pendingLandLag = LEDGE_GETUP_FRAMES;
+    this.setState(State.LANDLAG);
+  }
+
+  // ── APPLY HIT (called by resolveHitboxes after deferred collection) ──
+  // Receives a pre-computed HitEvent so all KB math has been done before
+  // any fighter state mutates, preventing order-of-iteration bugs.
+  applyHit(hitEvent) {
+    const { moveDef, kbResult } = hitEvent;
+
+    this.damage      += moveDef.damage;
+    this._flashTimer  = 10;
+    this.hitstunLeft  = kbResult.hitstunFrames;
+    this.hitstunMax   = kbResult.hitstunFrames;
+
+    // Apply velocity — this IS the knockback; vx/vy are in px/s
+    this.vx = kbResult.vx;
+    this.vy = kbResult.vy;
+
+    // Interrupt any current action
+    this.currentMove  = null;
+    this.activeHitbox = null;
+    this.onGround     = false;
+
+    // Spawn a hit burst effect at the intersection point
+    const hbRect = hitEvent.attacker.activeHitbox?.getRect();
+    const ex = hbRect ? hbRect.x + hbRect.w / 2 : this.cx;
+    const ey = hbRect ? hbRect.y + hbRect.h / 2 : this.cy;
+    this._spawnHitEffect(ex, ey, moveDef.sfxColor);
+
+    this.setState(State.HITSTUN);
+  }
+
+  // Apply hit-pause to this fighter (freeze physics for N frames)
+  applyHitPause(frames) {
+    this.hitPauseLeft = Math.max(this.hitPauseLeft, frames);
+  }
+
+  // ── SPAWN HIT EFFECT ─────────────────────
+  _spawnHitEffect(x, y, color) {
+    this._hitEffects.push({ x, y, color, life: 18, maxLife: 18, particles: [] });
+    // Create burst particles
+    const last = this._hitEffects[this._hitEffects.length - 1];
+    for (let i = 0; i < 8; i++) {
+      const ang = (Math.PI * 2 * i) / 8 + Math.random() * 0.4;
+      const spd = 60 + Math.random() * 80;
+      last.particles.push({ x, y, vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd });
+    }
+  }
+
+  // ── UPDATE ───────────────────────────────
+  update(dt, platforms) {
+    // ── Hit pause: freeze everything ────────
+    if (this.hitPauseLeft > 0) {
+      this.hitPauseLeft--;
+      this._tickFlash();
+      this._tickHitEffects(dt);
+      return;
+    }
+
+    const d   = this.def;
+    const ctl = this.controls;
+
+    this.stateTimer++;
+    this._tickFlash();
+    this._tickHitEffects(dt);
+    if (this.invuln > 0) this.invuln--;
+
+    // Refresh hurtbox geometry (also applies invuln flag)
+    this.refreshHurtboxes();
+
+    // ── LEDGE STATE ──────────────────────────
+    if (this.state === State.LEDGE) {
+      this.ledgeTimer++;
+      if (this.ledgeInvuln > 0) this.ledgeInvuln--;
+
+      // Auto-release after hang limit
+      if (this.ledgeTimer >= LEDGE_HANG_LIMIT) { this.ledgeGetUp(); return; }
+
+      // Jump or up input → get up
+      if (keyJust(ctl.jump) || keyHeld(ctl.up)) { this.ledgeGetUp(); return; }
+
+      // Down input → drop off ledge
+      if (keyJust(ctl.down)) {
+        if (this.ledge) this.ledge.release();
+        this.vy = 100; this.setState(State.AIRBORNE);
+        return;
+      }
+
+      // While hanging: no physics, fighter is pinned
+      return;
+    }
+
+    // ── SHIELD TICK (always, even in other states) ───
+    const shieldHeld = !isLocked(this.state) && keyHeld(ctl.shield);
+    this.shield.tick(this.state === State.SHIELD);
+
+    // ── SHIELD STUN ──────────────────────────
+    if (this.state === State.SHIELDSTUN) {
+      if (this.shield.stunLeft <= 0) {
+        // Re-enter shield if still holding, else idle
+        this.setState(shieldHeld ? State.SHIELD : State.IDLE);
+      }
+      return;
+    }
+
+    // ── SHIELD BREAK STUN ────────────────────
+    if (this.state === State.SHIELDBREAK) {
+      this.hitstunLeft--;
+      if (this.hitstunLeft <= 0 && this.onGround) this.setState(State.IDLE);
+      this._applyGravity(dt);
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this._resolvePlatforms(platforms);
+      return;
+    }
+
+    // Advance move phase FSM
+    if (this.currentMove) this._tickMove();
+
+    // ── HITSTUN ──────────────────────────────
+    if (this.state === State.HITSTUN) {
+      this.hitstunLeft--;
+      if (this.hitstunLeft <= 0 && this.onGround) this.setState(State.IDLE);
+      this._applyGravity(dt);
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this._resolvePlatforms(platforms);
+      return;
+    }
+
+    // ── LANDING LAG ──────────────────────────
+    if (this.state === State.LANDLAG) {
+      if (this.stateTimer >= this.pendingLandLag) { this.pendingLandLag = 0; this.setState(State.IDLE); }
+      return;
+    }
+
+    // ── ROLL ─────────────────────────────────
+    if (this.state === State.ROLL_F || this.state === State.ROLL_B) {
+      this.dodgeFrame++;
+      // Invuln window
+      this.invuln = (this.dodgeFrame >= ROLL_INVULN_START && this.dodgeFrame <= ROLL_INVULN_END) ? 1 : 0;
+      // Slide fighter across the ground
+      const rollSpeedPerFrame = (ROLL_DISTANCE / ROLL_DURATION) * 60; // px/s
+      this.vx = this.dodgeDir * rollSpeedPerFrame;
+      if (this.dodgeFrame >= ROLL_DURATION) {
+        this.vx = 0; this.invuln = 0;
+        this.rollCooldown = ROLL_COOLDOWN;
+        this.dodgeFrame   = 0;
+        this.setState(State.IDLE);
+      }
+      this.x += this.vx * dt;
+      this._resolvePlatforms(platforms);
+      return;
+    }
+
+    // ── AIR DODGE ────────────────────────────
+    if (this.state === State.AIRDODGE) {
+      this.dodgeFrame++;
+      this.invuln = (this.dodgeFrame >= AIRDODGE_INVULN_START && this.dodgeFrame <= AIRDODGE_INVULN_END) ? 1 : 0;
+      // Momentum decays after invuln window
+      if (this.dodgeFrame > AIRDODGE_INVULN_END) {
+        this.vx *= 0.85; this.vy *= 0.85;
+      }
+      if (this.dodgeFrame >= AIRDODGE_DURATION) {
+        this.invuln = 0; this.dodgeFrame = 0;
+        this.setState(State.AIRBORNE);
+      }
+      this._applyGravity(dt);
+      this.x += this.vx * dt; this.y += this.vy * dt;
+      this._resolvePlatforms(platforms);
+      return;
+    }
+
+    // ── SHIELD (active) ───────────────────────
+    if (this.state === State.SHIELD) {
+      if (!shieldHeld || this.shield.broken || this.shield.hp <= 0) {
+        this.setState(State.IDLE);
+      }
+      // Cannot act while shielding (except releasing shield)
+      return;
+    }
+
+    // ── Roll cooldown tick ─────────────────────
+    if (this.rollCooldown > 0) this.rollCooldown--;
+
+    const locked = isAttackState(this.state);
+
+    // ── SHIELD RAISE ─────────────────────────
+    if (!locked && this.onGround && shieldHeld && this.shield.canRaise()) {
+      this.vx = 0; // stop moving when shield goes up
+      this.currentMove = null; this.activeHitbox = null;
+      this.setState(State.SHIELD);
+      return;
+    }
+
+    // ── ROLL / AIR DODGE INPUT ────────────────
+    if (!locked && keyJust(ctl.dodge)) {
+      const l = keyHeld(ctl.left), r = keyHeld(ctl.right);
+      const u = keyHeld(ctl.up);
+      if (this.onGround && this.rollCooldown === 0) {
+        // Ground roll: direction = held input, or forward if neutral
+        const dir = r ? 1 : l ? -1 : this.facing;
+        this.dodgeDir   = dir;
+        this.dodgeFrame = 0;
+        this.vx = 0;
+        this.setState(dir === this.facing ? State.ROLL_F : State.ROLL_B);
+        return;
+      } else if (!this.onGround && !this.airdodgeUsed) {
+        // Air dodge: launch in held direction (or straight up if neutral)
+        const dx = r ? 1 : l ? -1 : 0;
+        const dy = u ? -1 : keyHeld(ctl.down) ? 1 : (dx === 0 ? -1 : 0);
+        const mag = Math.hypot(dx, dy) || 1;
+        this.vx = (dx / mag) * AIRDODGE_SPEED;
+        this.vy = (dy / mag) * AIRDODGE_SPEED;
+        this.airdodgeUsed = true;
+        this.dodgeFrame   = 0;
+        this.canFastFall  = false;
+        this.setState(State.AIRDODGE);
+        return;
+      }
+    }
+
+    // ── JUMP ─────────────────────────────────
+    if (!locked && keyJust(ctl.jump)) {
+      if (this.onGround) {
+        this.vy = d.jumpVy; this.onGround = false;
+        this.canFastFall = true; this.jumpsLeft = d.maxJumps - 1;
+        this.currentMove = null; this.setState(State.AIRBORNE);
+      } else if (this.jumpsLeft > 0) {
+        this.vy = d.dblJumpVy; this.canFastFall = true; this.jumpsLeft--;
+        this.currentMove = null; this.setState(State.AIRBORNE);
+      }
+    }
+
+    // ── FAST FALL ─────────────────────────────
+    if (!locked && !this.onGround && keyHeld(ctl.down) && this.vy > -200 && this.canFastFall) {
+      this.vy = d.fastFallVy; this.canFastFall = false; this.setState(State.FASTFALL);
+    }
+
+    // ── ATTACK INPUT ──────────────────────────
+    if (!locked) {
+      const air = !this.onGround;
+      if (keyJust(ctl.jab))     this.tryMove('jab');
+      if (keyJust(ctl.attack1)) this.tryMove(air ? 'fair'  : 'ftilt');
+      if (keyJust(ctl.attack2)) this.tryMove(air ? 'uair'  : 'utilt');
+      if (keyJust(ctl.attack3)) this.tryMove(air ? 'dair'  : 'dtilt');
+    }
+
+    // ── HORIZONTAL MOVEMENT ───────────────────
+    const moveLocks = locked && this.currentMove?.locksMovement;
+    if (!moveLocks) {
+      const l = keyHeld(ctl.left), r = keyHeld(ctl.right);
+      const inputDir = r ? 1 : l ? -1 : 0;
+      const maxSpd = this.onGround ? d.groundSpeed : d.airSpeed;
+      const accel  = this.onGround ? d.groundAccel : d.airAccel;
+      if (inputDir !== 0) {
+        if (!locked) this.facing = inputDir;
+        this.vx += inputDir * accel * dt;
+        if (Math.abs(this.vx) > maxSpd) this.vx = inputDir * maxSpd;
+      } else {
+        if (this.onGround) { this.vx *= Math.pow(d.groundFrict, dt*60); if (Math.abs(this.vx) < 4) this.vx = 0; }
+        else               { this.vx *= Math.pow(d.airFrict,    dt*60); }
+      }
+    }
+
+    this._applyGravity(dt);
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this._resolvePlatforms(platforms);
+    this._updateMovementState(keyHeld(ctl.right) ? 1 : keyHeld(ctl.left) ? -1 : 0);
+  }
+
+  // ── MOVE PHASE TICK ──────────────────────
+  // STARTUP → ACTIVE (Hitbox spawns) → ENDLAG → done
+  _tickMove() {
+    const m  = this.currentMove;
+    this.currentFrame++;
+    const cf          = this.currentFrame;
+    const endStartup  = m.startup;
+    const endActive   = m.startup + m.active;
+    const endEndlag   = m.startup + m.active + m.endlag;
+
+    if (cf <= endStartup) {
+      this.setState(State.STARTUP);
+      // Destroy any stale hitbox from a previous activation
+      this.activeHitbox = null;
+    } else if (cf <= endActive) {
+      this.setState(State.ACTIVE);
+      // Spawn hitbox on the FIRST frame of ACTIVE only — prevents
+      // re-creation (and thus hitTargets reset) on every active frame.
+      // To support multi-hit moves: add hitReset interval to moveDef.
+      if (!this.activeHitbox) this.activeHitbox = new Hitbox(this, m);
+    } else if (cf <= endEndlag) {
+      this.setState(State.ENDLAG);
+      this.activeHitbox = null;  // hitbox window closed
+    } else {
+      // Move complete
+      this.currentMove  = null;
+      this.currentFrame = 0;
+      this.activeHitbox = null;
+      this.setState(this.onGround ? State.IDLE : State.AIRBORNE);
+    }
+  }
+
+  _applyGravity(dt) {
+    if (!this.onGround) {
+      this.vy += GRAVITY * dt;
+      if (this.vy > TERMINAL_V) this.vy = TERMINAL_V;
+    }
+  }
+
+  _resolvePlatforms(platforms) {
+    this.onGround = false;
+    const sorted = [...platforms].sort((a,b) => (b.isGround?1:0)-(a.isGround?1:0));
+
+    for (const p of sorted) {
+      if (this.right <= p.x || this.left >= p.x + p.w) continue;
+      const prevBottom = this.bottom - this.vy * FIXED_DT;
+
+      if (this.vy >= 0 && this.bottom >= p.y && prevBottom <= p.y + 2) {
+        this.y = p.y - this.h; this.vy = 0;
+        this.onGround    = true;
+        this.canFastFall = false;
+        this.airdodgeUsed= false;   // reset air dodge on landing
+        this.jumpsLeft   = this.def.maxJumps;
+
+        // Aerial landing lag
+        if (this.currentMove?.aerial && this.currentMove.landLag > 0) {
+          this.pendingLandLag = this.currentMove.landLag;
+          this.currentMove = null; this.activeHitbox = null; this.currentFrame = 0;
+          this.setState(State.LANDLAG); return;
+        }
+        if (this.state === State.HITSTUN || this.state === State.SHIELDBREAK) {
+          this.vx *= 0.4;
+          if (this.hitstunLeft <= 0) this.setState(State.IDLE);
+        }
+      }
+    }
+
+    // ── Ledge snap ───────────────────────────
+    // Only attempt while airborne, falling or hitstun, not already on a ledge
+    if (!this.onGround && this.state !== State.LEDGE && this.vy >= -100) {
+      this._trySnapLedge();
+    }
+
+    if (this.x < 0)               { this.x = 0;                this.vx = Math.max(0, this.vx); }
+    if (this.right > stage.width)  { this.x = stage.width-this.w; this.vx = Math.min(0, this.vx); }
+
+    if (this.y > stage.height + 200) {
+      this.x = stage.width/2 - this.w/2; this.y = 80;
+      this.vx = 0; this.vy = 0;
+      this.damage      = Math.max(0, this.damage - 20);
+      this.currentMove = null; this.activeHitbox = null;
+      this.hitstunLeft = 0;
+      if (this.ledge) this.ledge.release();
+      this.setState(State.AIRBORNE);
+    }
+  }
+
+  // ── LEDGE SNAP ───────────────────────────
+  // Checks all ledge points. If this fighter's hand (top-corner) is within
+  // LEDGE_SNAP_DIST of a free ledge AND moving toward/past it, snap on.
+  _trySnapLedge() {
+    for (const ledge of ledges) {
+      if (!ledge.isFree()) continue;
+
+      // The fighter must be moving toward the ledge from outside the stage
+      // ledge.facing = +1 means it's the RIGHT edge of a platform →
+      //   fighter must be to the RIGHT of the ledge (x > ledge.x) moving left (vx < 0), or falling
+      // ledge.facing = -1 means LEFT edge →
+      //   fighter must be to the LEFT (right < ledge.x) moving right (vx > 0), or falling
+
+      const onCorrectSide = ledge.facing === 1
+        ? this.cx > ledge.x     // right ledge: fighter is to the right
+        : this.cx < ledge.x;    // left ledge: fighter is to the left
+
+      if (!onCorrectSide) continue;
+
+      // Distance from fighter's top-corner to the ledge point
+      const handX = ledge.facing === 1 ? this.left  : this.right;
+      const handY = this.top;
+      const dist  = Math.hypot(handX - ledge.x, handY - ledge.y);
+
+      if (dist <= LEDGE_SNAP_DIST) {
+        // Snap!
+        // Position fighter hanging below the ledge
+        this.x  = ledge.facing === 1 ? ledge.x : ledge.x - this.w;
+        this.y  = ledge.y;           // top of fighter aligns with ledge y
+        this.vx = 0; this.vy = 0;
+        this.facing      = -ledge.facing; // face inward
+        this.onGround    = false;
+        this.ledgeTimer  = 0;
+        this.ledgeInvuln = LEDGE_INVULN_FRAMES;
+        this.invuln      = LEDGE_INVULN_FRAMES;
+        this.currentMove = null; this.activeHitbox = null;
+        this.jumpsLeft   = this.def.maxJumps; // restore jumps on ledge
+        this.airdodgeUsed= false;
+        ledge.occupy(this);
+        this.setState(State.LEDGE);
+        return;
+      }
+    }
+  }
+
+  _updateMovementState(inputDir) {
+    if (isAttackState(this.state)) return;
+    if (this.state === State.HITSTUN || this.state === State.LANDLAG) return;
+    if (this.onGround) {
+      if (this.state === State.LANDING) { if (this.stateTimer >= 2) this.setState(State.IDLE); return; }
+      if (this.state === State.AIRBORNE || this.state === State.FASTFALL) { this.setState(State.LANDING); return; }
+      this.setState(Math.abs(this.vx) > 20 && inputDir !== 0 ? State.RUN : State.IDLE);
+    } else {
+      if (this.state !== State.FASTFALL) this.setState(State.AIRBORNE);
+    }
+  }
+
+  _tickFlash() { if (this._flashTimer > 0) this._flashTimer--; }
+
+  _tickHitEffects(dt) {
+    this._hitEffects = this._hitEffects.filter(e => e.life > 0);
+    for (const e of this._hitEffects) {
+      e.life--;
+      for (const p of e.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.88; p.vy *= 0.88; }
+    }
+  }
+
+  // ── DRAW ─────────────────────────────────
+  draw(ctx) {
+    const d = this.def;
+    ctx.save();
+
+    // ── Hit effects (drawn under fighter) ───
+    for (const e of this._hitEffects) {
+      const t = e.life / e.maxLife;
+      ctx.save();
+      ctx.globalAlpha = t * 0.9;
+      ctx.shadowColor = e.color; ctx.shadowBlur = 10;
+      for (const p of e.particles) {
+        ctx.fillStyle = e.color;
+        const r = 3 + (1 - t) * 4;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // ── Roll ghost trail ─────────────────────
+    // Faint copy of the fighter's body, offset behind the roll direction,
+    // only drawn during the invuln window of a roll.
+    if ((this.state === State.ROLL_F || this.state === State.ROLL_B) &&
+        this.dodgeFrame >= ROLL_INVULN_START && this.dodgeFrame <= ROLL_INVULN_END) {
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = d.color;
+      // Ghost at current position + small offset opposite to roll dir
+      const ghostOff = -this.dodgeDir * 18;
+      ctx.fillRect(Math.round(this.x + ghostOff), Math.round(this.y), this.w, this.h);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // ── Hurtboxes (debug overlay) ────────────
+    if (debugMode) {
+      for (const hb of this.hurtboxes) hb.draw(ctx);
+    }
+
+    // ── Body ─────────────────────────────────
+    ctx.shadowColor = d.shadowColor;
+    ctx.shadowBlur  = this.hitPauseLeft > 0 ? 30 : 16;
+
+    const flashWhite = this._flashTimer > 0 && this._flashTimer % 2 === 0;
+    let bodyColor = d.color;
+    if      (flashWhite)                             bodyColor = '#ffffff';
+    else if (this.state === State.STARTUP)           bodyColor = lerpHex(d.color, '#ff8800', 0.5);
+    else if (this.state === State.ACTIVE)            bodyColor = lerpHex(d.color, '#ff2244', 0.6);
+    else if (this.state === State.ENDLAG)            bodyColor = lerpHex(d.color, '#aa44ff', 0.4);
+    else if (this.state === State.LANDLAG)           bodyColor = lerpHex(d.color, '#aa44ff', 0.5);
+    else if (this.state === State.HITSTUN)           bodyColor = lerpHex(d.color, '#ffffff', 0.45);
+    else if (this.state === State.SHIELD)            bodyColor = lerpHex(d.color, '#4488ff', 0.4);
+    else if (this.state === State.SHIELDSTUN)        bodyColor = lerpHex(d.color, '#4488ff', 0.7);
+    else if (this.state === State.SHIELDBREAK)       bodyColor = '#ff2244';
+    else if (this.state === State.LEDGE)             bodyColor = lerpHex(d.color, '#00ffc8', 0.35);
+
+    // Invuln shimmer: alternate between base color and bright white every 2 frames
+    const invulnBlink = this.invuln > 0 && Math.floor(this.stateTimer / 2) % 2 === 0;
+
+    const landBlink = this.state === State.LANDING && this.stateTimer % 2 === 0;
+    ctx.fillStyle = (landBlink || invulnBlink) ? '#ffffff' : bodyColor;
+    ctx.fillRect(Math.round(this.x), Math.round(this.y), this.w, this.h);
+
+    ctx.shadowBlur  = 0;
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(this.x)+.5, Math.round(this.y)+.5, this.w-1, this.h-1);
+
+    // Eye
+    const eyeX = this.facing === 1 ? this.x + this.w*0.72 : this.x + this.w*0.28;
+    ctx.fillStyle='#fff'; ctx.shadowColor='#fff'; ctx.shadowBlur=5;
+    ctx.beginPath(); ctx.arc(eyeX, this.y + this.h*0.28, 4, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+
+    // ── Shield bubble ─────────────────────────
+    if (this.state === State.SHIELD || this.state === State.SHIELDSTUN) {
+      const radius = this.shield.bubbleRadius(this);
+      const frac   = this.shield.fraction;
+      // Color shifts from blue → yellow → red as shield shrinks
+      const bubbleColor = frac > 0.5
+        ? lerpHex('#4488ff', '#ffee00', 1 - (frac - 0.5) * 2)
+        : lerpHex('#ffee00', '#ff2244', 1 - frac * 2);
+
+      ctx.save();
+      ctx.globalAlpha = 0.35 + frac * 0.25;
+      ctx.shadowColor = bubbleColor; ctx.shadowBlur = 18;
+      ctx.strokeStyle = bubbleColor; ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(this.cx, this.cy - this.h * 0.1, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.08 + frac * 0.10;
+      ctx.fillStyle = bubbleColor;
+      ctx.fill();
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // ── Shield-break shockwave ────────────────
+    if (this.state === State.SHIELDBREAK && this.stateTimer < 20) {
+      const t = this.stateTimer / 20;
+      ctx.save();
+      ctx.globalAlpha = (1 - t) * 0.7;
+      ctx.shadowColor = '#ff2244'; ctx.shadowBlur = 20;
+      ctx.strokeStyle = '#ff2244'; ctx.lineWidth = 3;
+      const sr = 30 + t * 80;
+      ctx.beginPath(); ctx.arc(this.cx, this.cy, sr, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // ── Ledge hang indicator ──────────────────
+    if (this.state === State.LEDGE) {
+      // Draw a small grip indicator at the ledge corner
+      const gripX = this.facing === -1 ? this.right : this.left;
+      const gripY = this.top;
+      ctx.save();
+      ctx.shadowColor = '#00ffc8'; ctx.shadowBlur = 12;
+      ctx.fillStyle   = '#00ffc8';
+      ctx.beginPath(); ctx.arc(gripX, gripY, 5, 0, Math.PI * 2); ctx.fill();
+      // Invuln remaining bar — tiny horizontal bar above fighter
+      if (this.ledgeInvuln > 0) {
+        const barW = this.w;
+        const pct  = this.ledgeInvuln / LEDGE_INVULN_FRAMES;
+        ctx.globalAlpha = 0.75;
+        ctx.fillStyle = '#00ffc8';
+        ctx.fillRect(Math.round(this.x), Math.round(this.y - 6), Math.round(barW * pct), 3);
+        ctx.globalAlpha = 1;
+      }
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // ── Active Hitbox ─────────────────────────
+    if (this.activeHitbox) {
+      this.activeHitbox.draw(ctx);
+      if (debugMode) {
+        const r = this.activeHitbox.getRect();
+        ctx.fillStyle = '#ffffff'; ctx.font = '7px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(`HB#${this.activeHitbox.id} hits:${this.activeHitbox.hitTargets.size}`, r.x+r.w/2, r.y-3);
+      }
+    }
+
+    // ── State / move label ────────────────────
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = '8px "Share Tech Mono",monospace'; ctx.textAlign = 'center';
+    const lbl = this.currentMove
+      ? `${this.currentMove.id} [${this.currentFrame}]`
+      : this.state;
+    ctx.fillText(lbl, this.cx, this.y - 5);
+
+    // ── Velocity vector ───────────────────────
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(this.cx,this.cy); ctx.lineTo(this.cx+this.vx*0.04, this.cy+this.vy*0.04); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  phaseBarData() {
+    if (!this.currentMove) return null;
+    const m = this.currentMove, cf = this.currentFrame;
+    const tot = m.startup + m.active + m.endlag;
+    const pct = Math.min(1, cf / tot);
+    const color = cf <= m.startup ? 'var(--startup)'
+                : cf <= m.startup + m.active ? 'var(--active)' : 'var(--endlag)';
+    return { pct, color };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HITBOX ↔ HURTBOX RESOLUTION
+//
+//  Architecture:
+//   1. Iterate every fighter's active Hitbox.
+//   2. For each live Hitbox, iterate every OTHER fighter's Hurtboxes.
+//   3. Test AABB overlap (Hitbox.overlapsHurtbox).
+//   4. If overlap AND target not already in hitTargets:
+//      a. Mark target in hitTargets (prevents multi-hit THIS activation).
+//      b. Compute knockback via computeKnockback().
+//      c. Queue a HitEvent — do NOT mutate any fighter yet.
+//   5. After all checks: apply all queued HitEvents (applyHit + applyHitPause).
+//
+//  Deferred application (step 5) is critical: it means Fighter A's hit on
+//  Fighter B is computed using B's CURRENT damage percentage (before the
+//  hit adds to it), and B's state mutation doesn't affect A's hitbox test.
+//
+//  Returns: number of hits registered this tick.
+// ═══════════════════════════════════════════════════════════
+function resolveHitboxes(fighters) {
+  const events       = [];   // normal hits
+  const shieldEvents = [];   // hits absorbed by shield
+
+  for (const attacker of fighters) {
+    if (!attacker.activeHitbox) continue;
+    const hitbox = attacker.activeHitbox;
+
+    for (const defender of fighters) {
+      if (defender === attacker)                  continue;
+      if (hitbox.hitTargets.has(defender))        continue;  // anti-multi-hit
+      if (defender.state === State.HITSTUN)       continue;
+      if (defender.state === State.SHIELDBREAK)   continue;
+      if (defender.hitPauseLeft > 0)              continue;
+
+      // ── Shield intercept ──────────────────────
+      // If the defender is actively shielding AND the hitbox touches their
+      // body rect (not just hurtbox — shield covers the full body), route
+      // the hit to the shield instead of applying knockback.
+      if (defender.state === State.SHIELD || defender.state === State.SHIELDSTUN) {
+        // Quick AABB test against defender's body rect
+        const hr  = hitbox.getRect();
+        const inX = hr.x < defender.right && hr.x + hr.w > defender.left;
+        const inY = hr.y < defender.bottom && hr.y + hr.h > defender.top;
+        if (inX && inY) {
+          hitbox.hitTargets.add(defender);
+          shieldEvents.push(new HitEvent(attacker, defender, hitbox.moveDef,
+            computeKnockback(hitbox.moveDef, defender.damage, attacker.facing)));
+          continue;
+        }
+      }
+
+      // ── Normal hurtbox test ───────────────────
+      let hitAny = false;
+      for (const hurtbox of defender.hurtboxes) {
+        if (!hurtbox.active) continue;
+        if (hitbox.overlapsHurtbox(hurtbox)) { hitAny = true; break; }
+      }
+
+      if (hitAny) {
+        hitbox.hitTargets.add(defender);
+        const kb = computeKnockback(hitbox.moveDef, defender.damage, attacker.facing);
+        events.push(new HitEvent(attacker, defender, hitbox.moveDef, kb));
+      }
+    }
+  }
+
+  // Apply shield hits
+  for (const ev of shieldEvents) {
+    ev.defender.absorbOnShield(ev);
+    hitCount++;
+  }
+
+  // Apply normal hits atomically
+  for (const ev of events) {
+    ev.defender.applyHit(ev);
+    ev.attacker.applyHitPause(ev.kbResult.hitPauseFrames);
+    ev.defender.applyHitPause(ev.kbResult.hitPauseFrames);
+    hitCount++;
+  }
+
+  return events.length + shieldEvents.length;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STAGE
+// ═══════════════════════════════════════════════════════════
+const stage = { width: 960, height: 540 };
+const platforms = [
+  new Platform(0, stage.height - 50, stage.width, 50, true),
+  new Platform(200, 370, 180, 18),
+  new Platform(590, 370, 180, 18),
+  new Platform(380, 250, 200, 18),
+  new Platform( 60, 280, 120, 18),
+  new Platform(780, 280, 120, 18),
+];
+
+// ── Ledge snap points ────────────────────────────────────
+// One pair per edge platform (left ledge and right ledge).
+// Each Ledge(x, y, facing): x/y = the exact corner pixel,
+// facing = +1 (right side of platform) or -1 (left side).
+// The main ground floor has no ledges — fighters just blast off.
+const ledges = [
+  // Main left wall edge — fighters approach from left of stage
+  new Ledge(0,             stage.height - 50, -1),
+  new Ledge(stage.width,   stage.height - 50, +1),
+  // Left floating platform (x=200, w=180, y=370)
+  new Ledge(200,           370, -1),
+  new Ledge(200 + 180,     370, +1),
+  // Right floating platform (x=590, w=180, y=370)
+  new Ledge(590,           370, -1),
+  new Ledge(590 + 180,     370, +1),
+  // Center top platform (x=380, w=200, y=250)
+  new Ledge(380,           250, -1),
+  new Ledge(380 + 200,     250, +1),
+  // Far-left platform (x=60, w=120, y=280)
+  new Ledge(60,            280, -1),
+  new Ledge(60 + 120,      280, +1),
+  // Far-right platform (x=780, w=120, y=280)
+  new Ledge(780,           280, -1),
+  new Ledge(780 + 120,     280, +1),
+];
+
+// ═══════════════════════════════════════════════════════════
+//  FIGHTER INSTANCES
+// ═══════════════════════════════════════════════════════════
+const fighters = [
+  new Fighter('BLAZE', 260, 300, {
+    left:'KeyA', right:'KeyD', jump:'KeyW', down:'KeyS', up:'KeyW',
+    jab:'KeyJ', attack1:'KeyK', attack2:'KeyL', attack3:'Semicolon',
+    shield:'KeyF', dodge:'KeyG',
+  }),
+  new Fighter('FROST', 620, 300, {
+    left:'ArrowLeft', right:'ArrowRight', jump:'ArrowUp', down:'ArrowDown', up:'ArrowUp',
+    jab:'Numpad1', attack1:'Numpad2', attack2:'Numpad3', attack3:'Numpad4',
+    shield:'Numpad5', dodge:'Numpad6',
+  }),
+];
+
+// ═══════════════════════════════════════════════════════════
+//  RENDERER
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+canvas.width  = stage.width;
+canvas.height = stage.height;
+document.getElementById('canvas-wrap').style.width  = stage.width  + 'px';
+document.getElementById('canvas-wrap').style.height = stage.height + 'px';
+
+function drawBackground() {
+  ctx.fillStyle = '#080810'; ctx.fillRect(0, 0, stage.width, stage.height);
+  ctx.strokeStyle = 'rgba(30,30,60,0.6)'; ctx.lineWidth = 1;
+  for (let x=0; x<=stage.width;  x+=60) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,stage.height); ctx.stroke(); }
+  for (let y=0; y<=stage.height; y+=60) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(stage.width,y); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.beginPath(); ctx.moveTo(stage.width/2,0); ctx.lineTo(stage.width/2,stage.height); ctx.stroke();
+}
+
+function drawPlatforms() {
+  for (const p of platforms) {
+    ctx.shadowColor = p.isGround ? 'rgba(0,255,200,0.15)' : 'rgba(0,200,255,0.3)';
+    ctx.shadowBlur  = p.isGround ? 8 : 14;
+    if (p.isGround) {
+      const g = ctx.createLinearGradient(0,p.y,0,p.y+p.h);
+      g.addColorStop(0,'#1a3a3a'); g.addColorStop(1,'#0a1a1a');
+      ctx.fillStyle=g; ctx.fillRect(p.x,p.y,p.w,p.h);
+      ctx.shadowBlur=0; ctx.strokeStyle='#00ffc8'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y+1); ctx.lineTo(p.x+p.w,p.y+1); ctx.stroke();
+    } else {
+      ctx.fillStyle='#1a2040'; ctx.fillRect(p.x,p.y,p.w,p.h);
+      ctx.shadowBlur=0; ctx.strokeStyle='#3060ff'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x+p.w,p.y); ctx.stroke();
+      ctx.fillStyle='#3060ff'; ctx.fillRect(p.x,p.y,4,p.h); ctx.fillRect(p.x+p.w-4,p.y,4,p.h);
+    }
+    ctx.shadowBlur=0;
+  }
+}
+
+function drawLedges() {
+  for (const lg of ledges) {
+    // Draw a small notch at the ledge corner, brighter if occupied
+    const occupied = !lg.isFree();
+    ctx.save();
+    ctx.shadowColor = occupied ? '#00ffc8' : 'rgba(0,255,200,0.4)';
+    ctx.shadowBlur  = occupied ? 10 : 4;
+    ctx.fillStyle   = occupied ? '#00ffc8' : 'rgba(0,255,200,0.35)';
+    ctx.beginPath();
+    ctx.arc(lg.x, lg.y, occupied ? 5 : 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+}
+
+function render() {
+  drawBackground();
+  drawPlatforms();
+  drawLedges();
+  fighters.forEach(f => f.draw(ctx));
+
+  // Debug overlay banner
+  if (debugMode) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,238,0,0.15)';
+    ctx.fillRect(0,0,stage.width,20);
+    ctx.fillStyle = '#ffee00'; ctx.font = '10px "Share Tech Mono",monospace'; ctx.textAlign='center';
+    ctx.fillText('DEBUG MODE — Tab to toggle  |  Red=Hitbox  Blue=Hurtbox  Cyan=Ledge', stage.width/2, 13);
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HUD
+// ═══════════════════════════════════════════════════════════
+const hudEl = ['p1','p2'].map(id => ({
+  dmg:       document.getElementById(`${id}-dmg`),
+  state:     document.getElementById(`${id}-state`),
+  move:      document.getElementById(`${id}-move`),
+  frame:     document.getElementById(`${id}-frame`),
+  stun:      document.getElementById(`${id}-stun`),
+  jumps:     document.getElementById(`${id}-jumps`),
+  shield:    document.getElementById(`${id}-shield`),
+  ledgeDot:  document.getElementById(`${id}-ledge`),
+  phase:     document.getElementById(`${id}-phase`),
+  stunBar:   document.getElementById(`${id}-stun-bar`),
+  shieldBar: document.getElementById(`${id}-shield-bar`),
+}));
+const fpsEl       = document.getElementById('fps');
+const tickEl      = document.getElementById('tick');
+const hitsEl      = document.getElementById('hits');
+const hitPauseEl  = document.getElementById('hitpause');
+const debugModeEl = document.getElementById('debug-mode');
+
+function updateHUD(fps, tick) {
+  fighters.forEach((f, i) => {
+    const el = hudEl[i];
+    const dmgStr = `${Math.round(f.damage)}%`;
+    if (el.dmg.textContent !== dmgStr) {
+      el.dmg.textContent = dmgStr;
+      el.dmg.classList.add('flash');
+      setTimeout(() => el.dmg.classList.remove('flash'), 140);
+    }
+    el.state.textContent = f.state;
+    el.move.textContent  = f.currentMove ? f.currentMove.id : '—';
+    el.frame.textContent = f.currentMove
+      ? `${f.currentFrame}/${f.currentMove.startup+f.currentMove.active+f.currentMove.endlag}` : '—';
+    el.stun.textContent  = f.state === State.HITSTUN ? f.hitstunLeft : '—';
+    el.jumps.textContent = f.jumpsLeft;
+
+    // Shield bar
+    const shp  = Math.round(f.shield.hp);
+    el.shield.textContent = f.shield.broken ? 'BREAK' : shp;
+    el.shield.style.color = f.shield.broken ? '#ff2244'
+      : f.shield.hp < 30 ? '#ffee00' : '';
+    el.shieldBar.style.width      = (f.shield.fraction * 100) + '%';
+    el.shieldBar.classList.toggle('broken', f.shield.broken);
+
+    // Ledge dot
+    el.ledgeDot.classList.toggle('active', f.state === State.LEDGE);
+
+    const pb = f.phaseBarData();
+    if (pb) { el.phase.style.width = (pb.pct*100)+'%'; el.phase.style.background = pb.color; }
+    else    { el.phase.style.width = '0%'; }
+
+    const stunPct = f.hitstunMax > 0 ? f.hitstunLeft / f.hitstunMax : 0;
+    el.stunBar.style.width = (stunPct*100)+'%';
+  });
+
+  fpsEl.textContent       = fps;
+  tickEl.textContent      = tick;
+  hitsEl.textContent      = hitCount;
+  hitPauseEl.textContent  = Math.max(...fighters.map(f => f.hitPauseLeft));
+  debugModeEl.textContent = debugMode ? 'ON' : 'OFF';
+  debugModeEl.style.color = debugMode ? '#ffee00' : '';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GAME LOOP
+// ═══════════════════════════════════════════════════════════
+let prevTime=null, accumulator=0, totalTick=0, hitCount=0;
+let fpsFrames=0, fpsAccum=0, displayFps=60;
+
+function loop(timestamp) {
+  requestAnimationFrame(loop);
+  if (prevTime===null) { prevTime=timestamp; return; }
+
+  let rawDt = Math.min((timestamp-prevTime)/1000, 0.25);
+  prevTime = timestamp;
+
+  fpsAccum+=rawDt; fpsFrames++;
+  if (fpsAccum>=0.5) { displayFps=Math.round(fpsFrames/fpsAccum); fpsAccum=fpsFrames=0; }
+
+  accumulator+=rawDt;
+  while (accumulator>=FIXED_DT) {
+    fighters.forEach(f => f.update(FIXED_DT, platforms));
+    resolveHitboxes(fighters);
+    clearJust();
+    accumulator-=FIXED_DT;
+    totalTick++;
+  }
+
+  render();
+  updateHUD(displayFps, totalTick);
+}
+
+// ── Utility ────────────────────────────────────
+function lerpHex(a, b, t) {
+  const pa=parseInt(a.slice(1),16), pb=parseInt(b.slice(1),16);
+  const ar=(pa>>16)&0xff,ag=(pa>>8)&0xff,ab=pa&0xff;
+  const br=(pb>>16)&0xff,bg=(pb>>8)&0xff,bb=pb&0xff;
+  const rr=Math.round(ar+(br-ar)*t),rg=Math.round(ag+(bg-ag)*t),rb=Math.round(ab+(bb-ab)*t);
+  return `#${rr.toString(16).padStart(2,'0')}${rg.toString(16).padStart(2,'0')}${rb.toString(16).padStart(2,'0')}`;
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
