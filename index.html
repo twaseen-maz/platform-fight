@@ -248,17 +248,23 @@ const FIXED_DT   = 1 / 60;
 const GRAVITY    = 2200;
 const TERMINAL_V = 1400;
 
-// Hit pause thresholds (in raw knockback magnitude before damage scaling)
-// Hits above these raw KB values freeze both fighters for N frames
+// Hit pause thresholds — in Brawl KB units (post-formula, pre-velocity scaling).
+// Keeps hit-freeze feel data-driven and consistent with the new formula.
 const HIT_PAUSE_THRESHOLDS = [
-  { minKb: 600, frames: 8  },
-  { minKb: 350, frames: 5  },
-  { minKb: 150, frames: 3  },
-  { minKb:   0, frames: 1  },
+  { minKb: 60, frames: 8 },
+  { minKb: 40, frames: 5 },
+  { minKb: 20, frames: 3 },
+  { minKb:  0, frames: 1 },
 ];
 
-// Hitstun coefficient: hitstunFrames = floor(knockbackMagnitude * HITSTUN_SCALE)
-const HITSTUN_SCALE = 0.45;
+// Brawl uses hitstunFrames = floor(KB * 0.4).
+// Per-move hitstunMult on each moveDef overrides this (normals lower, specials higher).
+const HITSTUN_SCALE = 0.4;
+
+// Converts Brawl abstract KB units → px/s for our physics.
+// Brawl gravity ≈ 2800 u/s²; ours = 2200 px/s².
+// Tuned so KB ≈ 100 (strong mid-% hit) launches ~1300 px/s.
+const KB_TO_PX = 3.5;
 
 // Debug overlay toggle
 let debugMode = false;
@@ -457,50 +463,53 @@ class Hurtbox {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  KNOCKBACK CALCULATOR
-//  All knockback math lives here — nowhere else.
+//  KNOCKBACK CALCULATOR  —  Brawl formula
 //
-//  Formula (Smash-Bros-inspired):
-//    rawKb   = baseKnockback + (damage * knockbackGrowth)
-//    scaledKb = rawKb * (1 + targetPercent / 100)
-//    vx = cos(angle) * scaledKb * attackerFacing
-//    vy = -|sin(angle)| * scaledKb        (negative = up)
+//  Brawl KB formula (from Smashwiki):
+//    KB = (((p/10 + p*d/20) * (200/(w+200)) * 1.4) + 18) * (KBG/100) + BKB
 //
-//  Hitstun (frames):
-//    floor(scaledKb * HITSTUN_SCALE)
+//  Where:
+//    p   = target's current damage percent (BEFORE this hit is added)
+//    d   = damage dealt by the move
+//    w   = target's weight (100 = Mario baseline)
+//    BKB = base knockback
+//    KBG = knockback growth
 //
-//  Hit pause (frames, applied to BOTH fighters):
-//    Lookup in HIT_PAUSE_THRESHOLDS by rawKb (pre-scaling),
-//    so light jabs always feel snappy regardless of target %.
+//  KB is an abstract unit.  Multiply by KB_TO_PX to get px/s velocity.
+//
+//  Hitstun (Brawl):  floor(KB * 0.4)
+//  Per-move hitstunMult overrides the 0.4 coefficient.
+//
+//  Hit pause: looked up from HIT_PAUSE_THRESHOLDS by final KB value.
 // ═══════════════════════════════════════════════════════════
-function computeKnockback(moveDef, targetPercent, attackerFacing) {
-  const { damage, angle, baseKb, kbGrowth } = moveDef;
+function computeKnockback(moveDef, targetPercent, attackerFacing, targetWeight) {
+  const { damage: d, angle, baseKb: BKB, kbGrowth: KBG } = moveDef;
+  const p = targetPercent;   // percent BEFORE this hit
+  const w = targetWeight ?? 100;
 
-  // Step 1 — raw KB (independent of target's damage)
-  const rawKb    = baseKb + (damage * kbGrowth);
+  // ── Brawl formula ─────────────────────────────────────────
+  // Damage-scaling portion (grows with both target's percent and move damage)
+  const dmgPart  = (p / 10 + p * d / 20) * (200 / (w + 200)) * 1.4;
+  // Full KB in Brawl abstract units
+  const KB       = (dmgPart + 18) * (KBG / 100) + BKB;
 
-  // Step 2 — scale by target's accumulated damage percentage
-  const scaledKb = rawKb * (1 + targetPercent / 100);
+  // ── Velocity conversion ────────────────────────────────────
+  const speed    = Math.max(0, KB) * KB_TO_PX;   // px/s magnitude
+  const rad      = angle * Math.PI / 180;
+  const vx       =  Math.cos(rad) * speed * attackerFacing;
+  const vy       = -Math.abs(Math.sin(rad) * speed);  // negative = up
 
-  // Step 3 — convert angle to velocity components
-  const rad = angle * Math.PI / 180;
-  const vx  =  Math.cos(rad) * scaledKb * attackerFacing;
-  const vy  = -Math.abs(Math.sin(rad) * scaledKb);  // always launches upward for sin>0
+  // ── Hitstun ────────────────────────────────────────────────
+  const mult          = moveDef.hitstunMult ?? HITSTUN_SCALE;
+  const hitstunFrames = Math.floor(Math.max(0, KB) * mult);
 
-  // Step 4 — hitstun: per-move multiplier overrides global scale
-  //   normals  → hitstunMult ~0.30 (low, combo-friendly but not lockout)
-  //   specials → hitstunMult ~0.60 (high, punishing)
-  //   throws   → hitstunMult ~0.40 (medium)
-  const mult         = moveDef.hitstunMult ?? HITSTUN_SCALE;
-  const hitstunFrames = Math.floor(scaledKb * mult);
-
-  // Step 5 — hit pause from RAW kb (keep it data-driven, not damage-dependent)
+  // ── Hit pause — from final KB (already weight/damage scaled) ─
   let hitPauseFrames = 0;
   for (const t of HIT_PAUSE_THRESHOLDS) {
-    if (rawKb >= t.minKb) { hitPauseFrames = t.frames; break; }
+    if (KB >= t.minKb) { hitPauseFrames = t.frames; break; }
   }
 
-  return { vx, vy, hitstunFrames, hitPauseFrames, scaledKb, rawKb };
+  return { vx, vy, hitstunFrames, hitPauseFrames, scaledKb: KB, rawKb: KB };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -655,7 +664,7 @@ const MOVESETS = {
     jab: {
       id:'jab', aerial:false,
       startup:4, active:3, endlag:9, landLag:0,
-      damage:5, angle:35, baseKb:100, kbGrowth:5,
+      damage:5, angle:35, baseKb:20, kbGrowth:70,
       hitbox:{ ox:16, oy:2, w:44, h:20 }, hurtboxMod:null,
       sfxColor:'#c8e0ff', locksMovement:false, hitstunMult:0.30,
     },
@@ -667,7 +676,7 @@ const MOVESETS = {
     nair: {
       id:'nair', aerial:true,
       startup:6, active:10, endlag:12, landLag:8,
-      damage:8, angle:45, baseKb:150, kbGrowth:8,
+      damage:8, angle:45, baseKb:25, kbGrowth:90,
       hitbox:{ ox:0, oy:0, w:52, h:52 }, hurtboxMod:null,
       sfxColor:'#c8e0ff', locksMovement:false, hitstunMult:0.30,
     },
@@ -677,7 +686,7 @@ const MOVESETS = {
     fair: {
       id:'fair', aerial:true,
       startup:9, active:5, endlag:14, landLag:10,
-      damage:12, angle:22, baseKb:210, kbGrowth:10,
+      damage:12, angle:22, baseKb:30, kbGrowth:100,
       hitbox:{ ox:18, oy:4, w:50, h:28 }, hurtboxMod:null,
       sfxColor:'#88ccff', locksMovement:false, hitstunMult:0.30,
     },
@@ -687,7 +696,7 @@ const MOVESETS = {
     bair: {
       id:'bair', aerial:true,
       startup:7, active:4, endlag:13, landLag:9,
-      damage:13, angle:155, baseKb:230, kbGrowth:11,
+      damage:13, angle:155, baseKb:32, kbGrowth:105,
       hitbox:{ ox:-20, oy:2, w:48, h:26 }, hurtboxMod:null,
       sfxColor:'#aaddff', locksMovement:false, hitstunMult:0.30,
     },
@@ -697,7 +706,7 @@ const MOVESETS = {
     uair: {
       id:'uair', aerial:true,
       startup:8, active:6, endlag:12, landLag:8,
-      damage:11, angle:84, baseKb:190, kbGrowth:10,
+      damage:11, angle:84, baseKb:28, kbGrowth:95,
       hitbox:{ ox:-4, oy:-42, w:46, h:44 }, hurtboxMod:null,
       sfxColor:'#66ddff', locksMovement:false, hitstunMult:0.30,
     },
@@ -707,7 +716,7 @@ const MOVESETS = {
     dair: {
       id:'dair', aerial:true,
       startup:14, active:6, endlag:18, landLag:22,
-      damage:14, angle:270, baseKb:280, kbGrowth:9,
+      damage:14, angle:270, baseKb:35, kbGrowth:100,
       hitbox:{ ox:-4, oy:36, w:44, h:32 }, hurtboxMod:null,
       sfxColor:'#ff4488', locksMovement:true, hitstunMult:0.30,
     },
@@ -719,7 +728,7 @@ const MOVESETS = {
     neutralSpecial: {
       id:'neutralSpecial', aerial:false,
       startup:18, active:30, endlag:20, landLag:0,
-      damage:7, angle:10, baseKb:130, kbGrowth:6,
+      damage:7, angle:10, baseKb:28, kbGrowth:85,
       hitbox:{ ox:30, oy:8, w:36, h:16 }, hurtboxMod:null,
       sfxColor:'#44ffff', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
@@ -729,7 +738,7 @@ const MOVESETS = {
     sideSpecial: {
       id:'sideSpecial', aerial:false,
       startup:10, active:6, endlag:16, landLag:12,
-      damage:11, angle:30, baseKb:200, kbGrowth:9,
+      damage:11, angle:30, baseKb:32, kbGrowth:95,
       hitbox:{ ox:22, oy:-4, w:52, h:36 }, hurtboxMod:null,
       sfxColor:'#aaffee', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
@@ -739,7 +748,7 @@ const MOVESETS = {
     upSpecial: {
       id:'upSpecial', aerial:true,
       startup:5, active:8, endlag:30, landLag:24,
-      damage:9, angle:82, baseKb:180, kbGrowth:7,
+      damage:9, angle:82, baseKb:30, kbGrowth:90,
       hitbox:{ ox:-2, oy:-44, w:40, h:48 }, hurtboxMod:null,
       sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.60,
     },
@@ -749,7 +758,7 @@ const MOVESETS = {
     downSpecial: {
       id:'downSpecial', aerial:false,
       startup:4, active:20, endlag:22, landLag:0,
-      damage:14, angle:60, baseKb:220, kbGrowth:10,
+      damage:14, angle:60, baseKb:38, kbGrowth:110,
       hitbox:{ ox:0, oy:0, w:36, h:52 }, hurtboxMod:null,
       sfxColor:'#ffaaff', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
@@ -771,7 +780,7 @@ const MOVESETS = {
     fthrow: {
       id:'fthrow', aerial:false,
       startup:2, active:1, endlag:16, landLag:0,
-      damage:9, angle:30, baseKb:190, kbGrowth:8,
+      damage:9, angle:30, baseKb:40, kbGrowth:80,
       hitbox:{ ox:12, oy:4, w:36, h:28 }, hurtboxMod:null,
       sfxColor:'#88ccff', locksMovement:true, hitstunMult:0.40,
     },
@@ -780,7 +789,7 @@ const MOVESETS = {
     bthrow: {
       id:'bthrow', aerial:false,
       startup:3, active:1, endlag:18, landLag:0,
-      damage:11, angle:155, baseKb:230, kbGrowth:10,
+      damage:11, angle:155, baseKb:45, kbGrowth:90,
       hitbox:{ ox:-12, oy:4, w:36, h:28 }, hurtboxMod:null,
       sfxColor:'#aaddff', locksMovement:true, hitstunMult:0.40,
     },
@@ -789,7 +798,7 @@ const MOVESETS = {
     uthrow: {
       id:'uthrow', aerial:false,
       startup:3, active:1, endlag:20, landLag:0,
-      damage:8, angle:90, baseKb:170, kbGrowth:9,
+      damage:8, angle:90, baseKb:35, kbGrowth:85,
       hitbox:{ ox:0, oy:-16, w:36, h:28 }, hurtboxMod:null,
       sfxColor:'#66ddff', locksMovement:true, hitstunMult:0.40,
     },
@@ -798,7 +807,7 @@ const MOVESETS = {
     dthrow: {
       id:'dthrow', aerial:false,
       startup:2, active:1, endlag:22, landLag:0,
-      damage:7, angle:75, baseKb:130, kbGrowth:7,
+      damage:7, angle:75, baseKb:25, kbGrowth:70,
       hitbox:{ ox:0, oy:20, w:36, h:24 }, hurtboxMod:null,
       sfxColor:'#44ffaa', locksMovement:true, hitstunMult:0.40,
     },
@@ -819,7 +828,7 @@ const MOVESETS = {
     jab: {
       id:'jab', aerial:false,
       startup:9, active:3, endlag:16, landLag:0,
-      damage:8, angle:25, baseKb:190, kbGrowth:6,
+      damage:8, angle:25, baseKb:28, kbGrowth:80,
       hitbox:{ ox:16, oy:2, w:40, h:26 }, hurtboxMod:null,
       sfxColor:'#ff9900', locksMovement:false, hitstunMult:0.30,
     },
@@ -831,7 +840,7 @@ const MOVESETS = {
     nair: {
       id:'nair', aerial:true,
       startup:12, active:8, endlag:20, landLag:16,
-      damage:12, angle:40, baseKb:220, kbGrowth:9,
+      damage:12, angle:40, baseKb:32, kbGrowth:100,
       hitbox:{ ox:0, oy:0, w:56, h:56 }, hurtboxMod:null,
       sfxColor:'#ff9900', locksMovement:false, hitstunMult:0.30,
     },
@@ -841,7 +850,7 @@ const MOVESETS = {
     fair: {
       id:'fair', aerial:true,
       startup:18, active:5, endlag:22, landLag:18,
-      damage:16, angle:25, baseKb:300, kbGrowth:12,
+      damage:16, angle:25, baseKb:40, kbGrowth:120,
       hitbox:{ ox:18, oy:6, w:54, h:36 }, hurtboxMod:null,
       sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.30,
     },
@@ -851,7 +860,7 @@ const MOVESETS = {
     bair: {
       id:'bair', aerial:true,
       startup:14, active:5, endlag:16, landLag:12,
-      damage:14, angle:150, baseKb:260, kbGrowth:11,
+      damage:14, angle:150, baseKb:38, kbGrowth:110,
       hitbox:{ ox:-18, oy:4, w:50, h:32 }, hurtboxMod:null,
       sfxColor:'#ffaa00', locksMovement:false, hitstunMult:0.30,
     },
@@ -861,7 +870,7 @@ const MOVESETS = {
     uair: {
       id:'uair', aerial:true,
       startup:16, active:6, endlag:18, landLag:14,
-      damage:15, angle:88, baseKb:280, kbGrowth:11,
+      damage:15, angle:88, baseKb:40, kbGrowth:115,
       hitbox:{ ox:-4, oy:-44, w:56, h:46 }, hurtboxMod:null,
       sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.30,
     },
@@ -871,7 +880,7 @@ const MOVESETS = {
     dair: {
       id:'dair', aerial:true,
       startup:20, active:6, endlag:24, landLag:28,
-      damage:18, angle:270, baseKb:360, kbGrowth:10,
+      damage:18, angle:270, baseKb:45, kbGrowth:115,
       hitbox:{ ox:-6, oy:40, w:56, h:36 }, hurtboxMod:null,
       sfxColor:'#ff2200', locksMovement:true, hitstunMult:0.30,
     },
@@ -883,7 +892,7 @@ const MOVESETS = {
     neutralSpecial: {
       id:'neutralSpecial', aerial:false,
       startup:24, active:6, endlag:30, landLag:0,
-      damage:20, angle:80, baseKb:380, kbGrowth:12,
+      damage:20, angle:80, baseKb:48, kbGrowth:130,
       hitbox:{ ox:-8, oy:20, w:64, h:32 }, hurtboxMod:null,
       sfxColor:'#ff4400', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
@@ -893,7 +902,7 @@ const MOVESETS = {
     sideSpecial: {
       id:'sideSpecial', aerial:false,
       startup:14, active:12, endlag:20, landLag:16,
-      damage:13, angle:20, baseKb:240, kbGrowth:9,
+      damage:13, angle:20, baseKb:35, kbGrowth:105,
       hitbox:{ ox:20, oy:0, w:56, h:48 }, hurtboxMod:null,
       sfxColor:'#ff8800', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
@@ -903,7 +912,7 @@ const MOVESETS = {
     upSpecial: {
       id:'upSpecial', aerial:true,
       startup:10, active:10, endlag:32, landLag:26,
-      damage:12, angle:270, baseKb:200, kbGrowth:6,
+      damage:12, angle:270, baseKb:30, kbGrowth:90,
       hitbox:{ ox:-4, oy:24, w:56, h:40 }, hurtboxMod:null,
       sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.60,
     },
@@ -913,7 +922,7 @@ const MOVESETS = {
     downSpecial: {
       id:'downSpecial', aerial:false,
       startup:18, active:14, endlag:24, landLag:0,
-      damage:15, angle:50, baseKb:260, kbGrowth:10,
+      damage:15, angle:50, baseKb:40, kbGrowth:110,
       hitbox:{ ox:-30, oy:24, w:108, h:24 }, hurtboxMod:null,
       sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
@@ -934,7 +943,7 @@ const MOVESETS = {
     fthrow: {
       id:'fthrow', aerial:false,
       startup:3, active:1, endlag:20, landLag:0,
-      damage:13, angle:30, baseKb:290, kbGrowth:10,
+      damage:13, angle:30, baseKb:50, kbGrowth:90,
       hitbox:{ ox:14, oy:4, w:44, h:32 }, hurtboxMod:null,
       sfxColor:'#ff9900', locksMovement:true, hitstunMult:0.40,
     },
@@ -943,7 +952,7 @@ const MOVESETS = {
     bthrow: {
       id:'bthrow', aerial:false,
       startup:4, active:1, endlag:22, landLag:0,
-      damage:15, angle:160, baseKb:320, kbGrowth:11,
+      damage:15, angle:160, baseKb:55, kbGrowth:95,
       hitbox:{ ox:-14, oy:4, w:44, h:32 }, hurtboxMod:null,
       sfxColor:'#ffaa00', locksMovement:true, hitstunMult:0.40,
     },
@@ -952,7 +961,7 @@ const MOVESETS = {
     uthrow: {
       id:'uthrow', aerial:false,
       startup:4, active:1, endlag:24, landLag:0,
-      damage:10, angle:90, baseKb:230, kbGrowth:10,
+      damage:10, angle:90, baseKb:40, kbGrowth:90,
       hitbox:{ ox:0, oy:-20, w:44, h:32 }, hurtboxMod:null,
       sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.40,
     },
@@ -961,7 +970,7 @@ const MOVESETS = {
     dthrow: {
       id:'dthrow', aerial:false,
       startup:4, active:1, endlag:26, landLag:0,
-      damage:12, angle:78, baseKb:180, kbGrowth:9,
+      damage:12, angle:78, baseKb:30, kbGrowth:75,
       hitbox:{ ox:0, oy:24, w:44, h:32 }, hurtboxMod:null,
       sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.40,
     },
@@ -982,7 +991,7 @@ const MOVESETS = {
     jab: {
       id:'jab', aerial:false,
       startup:2, active:3, endlag:6, landLag:0,
-      damage:2, angle:20, baseKb:60, kbGrowth:3,
+      damage:2, angle:20, baseKb:10, kbGrowth:50,
       hitbox:{ ox:12, oy:6, w:28, h:16 }, hurtboxMod:null,
       sfxColor:'#aaff88', locksMovement:false, hitstunMult:0.30,
     },
@@ -994,7 +1003,7 @@ const MOVESETS = {
     nair: {
       id:'nair', aerial:true,
       startup:5, active:12, endlag:9, landLag:6,
-      damage:6, angle:50, baseKb:100, kbGrowth:5,
+      damage:6, angle:50, baseKb:18, kbGrowth:75,
       hitbox:{ ox:0, oy:0, w:40, h:40 }, hurtboxMod:null,
       sfxColor:'#aaff88', locksMovement:false, hitstunMult:0.30,
     },
@@ -1004,7 +1013,7 @@ const MOVESETS = {
     fair: {
       id:'fair', aerial:true,
       startup:7, active:8, endlag:10, landLag:7,
-      damage:8, angle:18, baseKb:130, kbGrowth:6,
+      damage:8, angle:18, baseKb:22, kbGrowth:85,
       hitbox:{ ox:18, oy:4, w:52, h:22 }, hurtboxMod:null,
       sfxColor:'#88ff44', locksMovement:false, hitstunMult:0.30,
     },
@@ -1014,7 +1023,7 @@ const MOVESETS = {
     bair: {
       id:'bair', aerial:true,
       startup:6, active:5, endlag:11, landLag:8,
-      damage:10, angle:160, baseKb:160, kbGrowth:8,
+      damage:10, angle:160, baseKb:26, kbGrowth:90,
       hitbox:{ ox:-18, oy:6, w:40, h:24 }, hurtboxMod:null,
       sfxColor:'#ccff44', locksMovement:false, hitstunMult:0.30,
     },
@@ -1024,7 +1033,7 @@ const MOVESETS = {
     uair: {
       id:'uair', aerial:true,
       startup:5, active:7, endlag:8, landLag:5,
-      damage:7, angle:84, baseKb:110, kbGrowth:6,
+      damage:7, angle:84, baseKb:20, kbGrowth:80,
       hitbox:{ ox:-4, oy:-36, w:40, h:36 }, hurtboxMod:null,
       sfxColor:'#88ffcc', locksMovement:false, hitstunMult:0.30,
     },
@@ -1035,7 +1044,7 @@ const MOVESETS = {
     dair: {
       id:'dair', aerial:true,
       startup:10, active:4, endlag:14, landLag:16,
-      damage:11, angle:270, baseKb:200, kbGrowth:7,
+      damage:11, angle:270, baseKb:28, kbGrowth:90,
       hitbox:{ ox:-2, oy:30, w:28, h:28 }, hurtboxMod:null,
       sfxColor:'#44ffcc', locksMovement:true, hitstunMult:0.30,
     },
@@ -1047,7 +1056,7 @@ const MOVESETS = {
     neutralSpecial: {
       id:'neutralSpecial', aerial:false,
       startup:12, active:40, endlag:14, landLag:0,
-      damage:6, angle:10, baseKb:90, kbGrowth:5,
+      damage:6, angle:10, baseKb:22, kbGrowth:80,
       hitbox:{ ox:28, oy:8, w:24, h:20 }, hurtboxMod:null,
       sfxColor:'#44ff88', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
@@ -1057,7 +1066,7 @@ const MOVESETS = {
     sideSpecial: {
       id:'sideSpecial', aerial:false,
       startup:6, active:4, endlag:12, landLag:8,
-      damage:7, angle:30, baseKb:110, kbGrowth:5,
+      damage:7, angle:30, baseKb:24, kbGrowth:85,
       hitbox:{ ox:16, oy:2, w:44, h:28 }, hurtboxMod:null,
       sfxColor:'#aaffcc', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
@@ -1067,7 +1076,7 @@ const MOVESETS = {
     upSpecial: {
       id:'upSpecial', aerial:true,
       startup:4, active:14, endlag:22, landLag:14,
-      damage:5, angle:88, baseKb:100, kbGrowth:4,
+      damage:5, angle:88, baseKb:20, kbGrowth:75,
       hitbox:{ ox:-2, oy:-36, w:32, h:50 }, hurtboxMod:null,
       sfxColor:'#ccffaa', locksMovement:true, hitstunMult:0.60,
     },
@@ -1077,7 +1086,7 @@ const MOVESETS = {
     downSpecial: {
       id:'downSpecial', aerial:false,
       startup:8, active:50, endlag:10, landLag:0,
-      damage:9, angle:55, baseKb:120, kbGrowth:6,
+      damage:9, angle:55, baseKb:26, kbGrowth:85,
       hitbox:{ ox:0, oy:28, w:28, h:20 }, hurtboxMod:null,
       sfxColor:'#ffff44', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
@@ -1098,7 +1107,7 @@ const MOVESETS = {
     fthrow: {
       id:'fthrow', aerial:false,
       startup:2, active:1, endlag:14, landLag:0,
-      damage:6, angle:25, baseKb:130, kbGrowth:6,
+      damage:6, angle:25, baseKb:32, kbGrowth:70,
       hitbox:{ ox:12, oy:6, w:32, h:24 }, hurtboxMod:null,
       sfxColor:'#88ff44', locksMovement:true, hitstunMult:0.40,
     },
@@ -1107,7 +1116,7 @@ const MOVESETS = {
     bthrow: {
       id:'bthrow', aerial:false,
       startup:3, active:1, endlag:14, landLag:0,
-      damage:7, angle:160, baseKb:150, kbGrowth:7,
+      damage:7, angle:160, baseKb:35, kbGrowth:80,
       hitbox:{ ox:-12, oy:6, w:32, h:24 }, hurtboxMod:null,
       sfxColor:'#ccff44', locksMovement:true, hitstunMult:0.40,
     },
@@ -1116,7 +1125,7 @@ const MOVESETS = {
     uthrow: {
       id:'uthrow', aerial:false,
       startup:3, active:1, endlag:16, landLag:0,
-      damage:5, angle:88, baseKb:120, kbGrowth:6,
+      damage:5, angle:88, baseKb:28, kbGrowth:75,
       hitbox:{ ox:0, oy:-14, w:32, h:24 }, hurtboxMod:null,
       sfxColor:'#aaffcc', locksMovement:true, hitstunMult:0.40,
     },
@@ -1125,7 +1134,7 @@ const MOVESETS = {
     dthrow: {
       id:'dthrow', aerial:false,
       startup:2, active:1, endlag:18, landLag:0,
-      damage:4, angle:68, baseKb:90, kbGrowth:5,
+      damage:4, angle:68, baseKb:18, kbGrowth:65,
       hitbox:{ ox:0, oy:20, w:32, h:20 }, hurtboxMod:null,
       sfxColor:'#88ffcc', locksMovement:true, hitstunMult:0.40,
     },
@@ -1140,6 +1149,7 @@ const FIGHTER_DEFS = {
   BLADE: {
     color:'#b8d4ff', shadowColor:'rgba(140,180,255,0.55)',
     width:34, height:54,
+    weight:100,                      // Brawl baseline (Mario = 100)
     groundSpeed:480, groundAccel:2600,
     airSpeed:400,    airAccel:1600,
     groundFrict:0.72, airFrict:0.978,
@@ -1155,6 +1165,7 @@ const FIGHTER_DEFS = {
   GRUNT: {
     color:'#cc6622', shadowColor:'rgba(180,80,20,0.6)',
     width:48, height:60,
+    weight:116,                      // Heavy — Bowser-tier, hard to send flying
     groundSpeed:420, groundAccel:2000,
     airSpeed:310,    airAccel:1100,
     groundFrict:0.62, airFrict:0.970,
@@ -1170,6 +1181,7 @@ const FIGHTER_DEFS = {
   VEX: {
     color:'#88ff44', shadowColor:'rgba(100,220,40,0.5)',
     width:28, height:44,
+    weight:80,                       // Light — Jigglypuff-tier, dies early
     groundSpeed:540, groundAccel:3200,
     airSpeed:500,    airAccel:2400,
     groundFrict:0.76, airFrict:0.974,
@@ -2062,7 +2074,7 @@ function resolveHitboxes(fighters) {
         if (inX && inY) {
           hitbox.hitTargets.add(defender);
           shieldEvents.push(new HitEvent(attacker, defender, hitbox.moveDef,
-            computeKnockback(hitbox.moveDef, defender.damage, attacker.facing)));
+            computeKnockback(hitbox.moveDef, defender.damage, attacker.facing, defender.def.weight)));
           continue;
         }
       }
@@ -2076,7 +2088,7 @@ function resolveHitboxes(fighters) {
 
       if (hitAny) {
         hitbox.hitTargets.add(defender);
-        const kb = computeKnockback(hitbox.moveDef, defender.damage, attacker.facing);
+        const kb = computeKnockback(hitbox.moveDef, defender.damage, attacker.facing, defender.def.weight);
         events.push(new HitEvent(attacker, defender, hitbox.moveDef, kb));
       }
     }
