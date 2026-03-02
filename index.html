@@ -1801,42 +1801,41 @@ class Fighter {
   }
 
   // ── LEDGE SNAP ───────────────────────────
-  // Attempts to grab any free ledge. A snap happens when:
-  //   1. The relevant hand corner is within LEDGE_SNAP_DIST of the ledge point
-  //   2. The fighter is not moving strongly AWAY from the ledge (vx check)
-  // No upward-velocity gate — recoveries using up-specials or jump must be able to grab.
+  // Modelled on Brawl ledge grab: any airborne fighter within the snap
+  // radius of a free ledge grabs it, regardless of velocity direction.
+  // The "grab point" is the fighter's upper-body corner (25% down from top),
+  // matching where Brawl places the grab hitbox on characters.
   _trySnapLedge() {
     for (const ledge of ledges) {
       if (!ledge.isFree()) continue;
 
-      // Hand position: the corner that reaches toward the ledge
-      //   right ledge (facing +1): fighter approaches from outside-right → left hand
-      //   left ledge  (facing -1): fighter approaches from outside-left  → right hand
+      // Upper-body grab point — 25% down from the top of the sprite,
+      // at the near-side horizontal edge (left hand for right ledge, right hand for left ledge).
       const handX = ledge.facing === 1 ? this.left  : this.right;
-      const handY = this.top;
+      const handY = this.top + this.h * 0.25;   // upper-body, not crown
 
       const dist = Math.hypot(handX - ledge.x, handY - ledge.y);
       if (dist > LEDGE_SNAP_DIST) continue;
 
-      // Reject if fighter is moving strongly AWAY from the ledge horizontally.
-      // "Away" = vx pushing them further from the platform interior.
-      //   right ledge: moving right (vx > threshold) = moving away
-      //   left ledge:  moving left  (vx < -threshold) = moving away
-      const AWAY_THRESHOLD = 200; // px/s — allow slow drift but block clear departures
-      if (ledge.facing === 1 && this.vx >  AWAY_THRESHOLD) continue;
-      if (ledge.facing === -1 && this.vx < -AWAY_THRESHOLD) continue;
+      // Only reject if the fighter is INSIDE the stage horizontally —
+      // i.e. their center has already passed the ledge into the platform.
+      // This prevents accidental ledge grabs when landing on the surface.
+      const pastLedge = ledge.facing === 1
+        ? this.cx < ledge.x - this.w     // right ledge: center is well inside stage
+        : this.cx > ledge.x + this.w;    // left ledge: center is well inside stage
+      if (pastLedge) continue;
 
-      // Snap! Position fighter hanging just below the ledge corner.
+      // Snap! Pin fighter hanging below the ledge corner.
       this.x  = ledge.facing === 1 ? ledge.x : ledge.x - this.w;
-      this.y  = ledge.y;           // top of fighter aligns with ledge y
+      this.y  = ledge.y;
       this.vx = 0; this.vy = 0;
-      this.facing      = -ledge.facing; // face inward onto the stage
+      this.facing      = -ledge.facing;   // face inward onto the stage
       this.onGround    = false;
       this.ledgeTimer  = 0;
       this.ledgeInvuln = LEDGE_INVULN_FRAMES;
       this.invuln      = LEDGE_INVULN_FRAMES;
       this.currentMove = null; this.activeHitbox = null;
-      this.jumpsLeft   = this.def.maxJumps; // restore jumps on ledge grab
+      this.jumpsLeft   = this.def.maxJumps;
       this.airdodgeUsed= false;
       ledge.occupy(this);
       this.setState(State.LEDGE);
@@ -3081,6 +3080,7 @@ class GameScene extends Scene {
     this._timer      = 0;
     this._timeLimit  = 0;
     this._paused     = false;
+    this._gameOver   = false;   // true once SM.goto('Victory') has been queued
     this._ticksSinceStart = 0;
     this._prevDamage = [0, 0];
     this._dmgFlash   = [0, 0];   // flash timer per player
@@ -3100,6 +3100,7 @@ class GameScene extends Scene {
     this._stocks     = [MatchConfig.stocks, MatchConfig.stocks];
     this._timer      = 0;
     this._timeLimit  = MatchConfig.timeLimit;
+    this._gameOver   = false;
     this._ticksSinceStart = 0;
     this._prevDamage = [fighters[0].damage, fighters[1].damage];
     this._dmgFlash   = [0, 0];
@@ -3154,12 +3155,14 @@ class GameScene extends Scene {
       }
     });
 
-    // Win condition
+    // Win condition — only trigger once; _gameOver prevents repeated SM.goto calls
+    // during the fade-out transition (which keeps GameScene.update running)
     const p1Dead = this._stocks[0] <= 0;
     const p2Dead = this._stocks[1] <= 0;
     const timeUp = this._timeLimit > 0 && this._timer >= this._timeLimit;
 
-    if (p1Dead || p2Dead || timeUp) {
+    if (!this._gameOver && (p1Dead || p2Dead || timeUp)) {
+      this._gameOver = true;
       const winner = p1Dead ? 1 : p2Dead ? 0 : (fighters[0].damage < fighters[1].damage ? 0 : 1);
       SM.goto('Victory', {
         winner,
