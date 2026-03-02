@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PLATFORM FIGHTER — ENGINE v0.4</title>
+<title>PLATFORM FIGHTER — ENGINE v0.5</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap');
 
@@ -34,21 +34,14 @@
 
   #app {
     display: flex; flex-direction: column;
-    align-items: center;
+    align-items: center; justify-content: center;
     height: 100vh;
-    padding: 10px 14px; gap: 8px;
+    padding: 0; gap: 0;
+    background: #080810;
   }
 
-  header {
-    display: flex; align-items: center; gap: 20px;
-    width: 100%; max-width: 960px;
-  }
-  header h1 {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 12px; font-weight: 900; letter-spacing: 4px;
-    color: var(--accent); text-shadow: 0 0 12px var(--accent);
-  }
-  header .version { font-size: 10px; color: var(--dim); letter-spacing: 2px; }
+  /* Header always hidden — title is drawn by MainMenuScene on canvas */
+  header { display: none !important; }
 
   #canvas-wrap {
     position: relative;
@@ -138,6 +131,31 @@
     font-size: 9px; color: var(--dim); letter-spacing: 1px; flex-wrap: wrap;
   }
   #debug-bar span { color: var(--text); }
+
+  /* ── UI overlay canvas (menus + in-game HUD) ──────────────
+     Full-screen, fixed, always on top. Scenes clear + redraw it
+     every frame. pointer-events:none so keyboard focus stays on body. */
+  #ui-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* ── DOM HUD & debug bar always hidden — canvas HUD only ── */
+  #hud, #debug-bar { display: none !important; }
+
+  /* ── menu-active: dim game canvas under UI overlay ──────── */
+  #app.menu-active #canvas-wrap {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  #app:not(.menu-active) #canvas-wrap {
+    opacity: 1;
+    transition: opacity 0.3s;
+  }
 </style>
 </head>
 <body>
@@ -145,12 +163,14 @@
 
   <header>
     <h1>PLATFORM FIGHTER</h1>
-    <div class="version">ENGINE v0.4 — SHIELD / DODGE / LEDGE</div>
+    <div class="version">ENGINE v0.5 — SCENE MANAGER / UI</div>
   </header>
 
   <div id="canvas-wrap">
     <canvas id="canvas"></canvas>
   </div>
+  <!-- Full-screen UI overlay canvas for menus / HUD drawn via canvas API -->
+  <canvas id="ui-canvas"></canvas>
 
   <div id="hud">
     <div class="fighter-panel p1">
@@ -1417,17 +1437,47 @@ const FIGHTER_DEFS = {
 
 // ═══════════════════════════════════════════════════════════
 //  INPUT
+//
+//  Root causes fixed here:
+//
+//  Bug 1 — Attacks stop after one use:
+//    Old code used object-existence to detect first press. After
+//    clearJust() the entry stayed alive with held:true. On the next
+//    press, the else branch fired and set justPressed:false immediately.
+//    Fix: use the held flag itself to distinguish fresh-press from
+//    key-repeat. justPressed is only set true when held was false.
+//
+//  Bug 2 — Jump missed on landing:
+//    clearJust() ran inside gamePhysicsTick(), which fires multiple
+//    times per frame during accumulator catch-up. A jump pressed
+//    between renders could be consumed by tick 1 before tick 2 reads
+//    it. Fix: move clearJust() out of gamePhysicsTick() entirely.
+//    Instead it runs once per render frame, AFTER all physics ticks
+//    complete, so every justPressed survives the full batch of ticks.
+//
+//  Extra: keyup now deletes the entry so the next keydown always
+//  takes the fresh-press path, even after clearJust has run.
 // ═══════════════════════════════════════════════════════════
 const keys = {};
 window.addEventListener('keydown', e => {
-  if (!keys[e.code]) keys[e.code] = { justPressed: true };
-  else               keys[e.code].justPressed = false;
-  keys[e.code].held = true;
+  // Only set justPressed on a genuine new press (held was false or absent)
+  const wasHeld = keys[e.code]?.held ?? false;
+  if (!wasHeld) {
+    keys[e.code] = { held: true, justPressed: true };
+  } else {
+    // Key-repeat: keep held, do NOT touch justPressed
+    keys[e.code].held = true;
+  }
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
 });
-window.addEventListener('keyup', e => { keys[e.code] = { held:false, justPressed:false }; });
+window.addEventListener('keyup', e => {
+  // Delete entirely so the next keydown always hits the fresh-press path
+  delete keys[e.code];
+});
 const keyHeld = c => !!(keys[c]?.held);
 const keyJust = c => !!(keys[c]?.justPressed);
+// Called once per RENDER FRAME (not per physics tick) so justPressed
+// survives all ticks in a multi-tick catch-up batch.
 function clearJust() { for (const k in keys) keys[k].justPressed = false; }
 
 // ═══════════════════════════════════════════════════════════
@@ -1508,6 +1558,7 @@ class Fighter {
 
     this._flashTimer    = 0;
     this._hitEffects    = [];  // { x,y, color, life, maxLife } cosmetic bursts
+    this._blasted       = false; // set true when fighter leaves blast zone; cleared by GameScene on respawn
   }
 
   // ── Bounds (body rect) ─────────────────────
@@ -1936,14 +1987,15 @@ class Fighter {
     if (this.x < 0)               { this.x = 0;                this.vx = Math.max(0, this.vx); }
     if (this.right > stage.width)  { this.x = stage.width-this.w; this.vx = Math.min(0, this.vx); }
 
-    if (this.y > stage.height + 200) {
-      this.x = stage.width/2 - this.w/2; this.y = 80;
-      this.vx = 0; this.vy = 0;
-      this.damage      = Math.max(0, this.damage - 20);
-      this.currentMove = null; this.activeHitbox = null;
-      this.hitstunLeft = 0;
-      if (this.ledge) this.ledge.release();
-      this.setState(State.AIRBORNE);
+    // Blast zone — set flag for GameScene to detect; also clean up state
+    if (this.y > stage.height + 200 || this.x < -300 || this.x > stage.width + 300) {
+      if (!this._blasted) {
+        this._blasted = true;
+        this.vx = 0; this.vy = 0;
+        this.currentMove = null; this.activeHitbox = null;
+        this.hitstunLeft = 0;
+        if (this.ledge) this.ledge.release();
+      }
     }
   }
 
@@ -2458,32 +2510,20 @@ function updateHUD(fps, tick) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  GAME LOOP
+//  GAME LOOP  (wrapped by SceneManager — see below)
 // ═══════════════════════════════════════════════════════════
 let prevTime=null, accumulator=0, totalTick=0, hitCount=0;
 let fpsFrames=0, fpsAccum=0, displayFps=60;
 
-function loop(timestamp) {
-  requestAnimationFrame(loop);
-  if (prevTime===null) { prevTime=timestamp; return; }
-
-  let rawDt = Math.min((timestamp-prevTime)/1000, 0.25);
-  prevTime = timestamp;
-
-  fpsAccum+=rawDt; fpsFrames++;
-  if (fpsAccum>=0.5) { displayFps=Math.round(fpsFrames/fpsAccum); fpsAccum=fpsFrames=0; }
-
-  accumulator+=rawDt;
-  while (accumulator>=FIXED_DT) {
-    fighters.forEach(f => f.update(FIXED_DT, platforms));
-    resolveHitboxes(fighters);
-    clearJust();
-    accumulator-=FIXED_DT;
-    totalTick++;
-  }
-
-  render();
-  updateHUD(displayFps, totalTick);
+// Core physics tick used by GameScene
+function gamePhysicsTick() {
+  fighters.forEach(f => f.update(FIXED_DT, platforms));
+  resolveHitboxes(fighters);
+  // NOTE: clearJust() is NOT called here. It runs once per render frame
+  // in the master loop, after all physics ticks complete. This ensures
+  // a justPressed input survives an entire multi-tick catch-up batch
+  // and is never dropped between ticks.
+  totalTick++;
 }
 
 // ── Utility ────────────────────────────────────
@@ -2493,6 +2533,998 @@ function lerpHex(a, b, t) {
   const br=(pb>>16)&0xff,bg=(pb>>8)&0xff,bb=pb&0xff;
   const rr=Math.round(ar+(br-ar)*t),rg=Math.round(ag+(bg-ag)*t),rb=Math.round(ab+(bb-ab)*t);
   return `#${rr.toString(16).padStart(2,'0')}${rg.toString(16).padStart(2,'0')}${rb.toString(16).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI CANVAS
+//  Separate full-screen canvas used by all menu scenes.
+//  Game canvas (960×540) is fixed; UI canvas stretches to window.
+// ═══════════════════════════════════════════════════════════
+const uiCanvas = document.getElementById('ui-canvas');
+const uiCtx    = uiCanvas.getContext('2d');
+
+function resizeUICanvas() {
+  uiCanvas.width  = window.innerWidth;
+  uiCanvas.height = window.innerHeight;
+}
+resizeUICanvas();
+window.addEventListener('resize', resizeUICanvas);
+
+// Shorthand for centered UI canvas dimensions
+const UI = {
+  get w() { return uiCanvas.width; },
+  get h() { return uiCanvas.height; },
+  get cx(){ return uiCanvas.width  / 2; },
+  get cy(){ return uiCanvas.height / 2; },
+};
+
+// ── Canvas drawing utilities ──────────────────────────────
+
+function uiFillRect(x, y, w, h, color, alpha=1) {
+  uiCtx.save();
+  uiCtx.globalAlpha = alpha;
+  uiCtx.fillStyle   = color;
+  uiCtx.fillRect(x, y, w, h);
+  uiCtx.restore();
+}
+
+function uiText(txt, x, y, { size=18, color='#c8d8e8', align='center', font='Orbitron', alpha=1, glow=null }={}) {
+  uiCtx.save();
+  uiCtx.globalAlpha  = alpha;
+  uiCtx.font         = `900 ${size}px "${font}", monospace`;
+  uiCtx.fillStyle    = color;
+  uiCtx.textAlign    = align;
+  uiCtx.textBaseline = 'middle';
+  if (glow) { uiCtx.shadowColor = glow; uiCtx.shadowBlur = 18; }
+  uiCtx.fillText(txt, x, y);
+  uiCtx.restore();
+}
+
+function uiMonoText(txt, x, y, { size=13, color='#c8d8e8', align='center', alpha=1 }={}) {
+  uiCtx.save();
+  uiCtx.globalAlpha  = alpha;
+  uiCtx.font         = `${size}px "Share Tech Mono", monospace`;
+  uiCtx.fillStyle    = color;
+  uiCtx.textAlign    = align;
+  uiCtx.textBaseline = 'middle';
+  uiCtx.fillText(txt, x, y);
+  uiCtx.restore();
+}
+
+function uiLine(x1, y1, x2, y2, color='#1e1e38', width=1, alpha=1) {
+  uiCtx.save();
+  uiCtx.globalAlpha  = alpha;
+  uiCtx.strokeStyle  = color;
+  uiCtx.lineWidth    = width;
+  uiCtx.beginPath(); uiCtx.moveTo(x1,y1); uiCtx.lineTo(x2,y2); uiCtx.stroke();
+  uiCtx.restore();
+}
+
+function uiRect(x, y, w, h, color='#1e1e38', width=1, alpha=1) {
+  uiCtx.save();
+  uiCtx.globalAlpha = alpha;
+  uiCtx.strokeStyle = color;
+  uiCtx.lineWidth   = width;
+  uiCtx.strokeRect(x+.5, y+.5, w-1, h-1);
+  uiCtx.restore();
+}
+
+// Stat bar: label + filled bar
+function uiStatBar(label, value, x, y, barW, color) {
+  uiMonoText(label, x, y, { align:'left', size:11, color:'#4a5568' });
+  uiFillRect(x+60, y-6, barW, 11, '#0a0a1a');
+  uiFillRect(x+60, y-6, Math.round(barW * value), 11, color, 0.85);
+  uiRect(x+60, y-6, barW, 11, '#1e1e38');
+}
+
+// Scanline overlay for all scenes
+function uiScanlines() {
+  uiCtx.save();
+  uiCtx.globalAlpha = 0.04;
+  uiCtx.fillStyle   = '#000000';
+  for (let y = 0; y < UI.h; y += 4) uiCtx.fillRect(0, y, UI.w, 2);
+  uiCtx.restore();
+}
+
+// Vignette
+function uiVignette() {
+  const g = uiCtx.createRadialGradient(UI.cx, UI.cy, UI.h * 0.2, UI.cx, UI.cy, UI.h * 0.75);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,20,0.55)');
+  uiCtx.save();
+  uiCtx.fillStyle = g;
+  uiCtx.fillRect(0, 0, UI.w, UI.h);
+  uiCtx.restore();
+}
+
+// Animated grid background for menus
+function uiGridBackground(t) {
+  uiFillRect(0, 0, UI.w, UI.h, '#080810');
+  const spacing = 60;
+  const offset  = (t * 12) % spacing;
+  uiCtx.save();
+  uiCtx.strokeStyle = 'rgba(30,30,60,0.5)';
+  uiCtx.lineWidth   = 1;
+  for (let x = -spacing + (offset % spacing); x < UI.w + spacing; x += spacing) {
+    uiCtx.beginPath(); uiCtx.moveTo(x,0); uiCtx.lineTo(x,UI.h); uiCtx.stroke();
+  }
+  for (let y = 0; y < UI.h + spacing; y += spacing) {
+    uiCtx.beginPath(); uiCtx.moveTo(0,y); uiCtx.lineTo(UI.w,y); uiCtx.stroke();
+  }
+  uiCtx.restore();
+}
+
+// Horizontal separator
+function uiSeparator(y, alpha=0.3) {
+  uiLine(UI.cx - 200, y, UI.cx + 200, y, '#00ffc8', 1, alpha);
+}
+
+// ── Transition helper ─────────────────────────────────────
+// Returns 0–1 ease-in-out value for t in [0, duration]
+function easeInOut(t, duration) {
+  const x = Math.min(1, t / duration);
+  return x < 0.5 ? 2*x*x : -1+(4-2*x)*x;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CHARACTER ROSTER DATA
+//  Maps FIGHTER_DEFS names to display metadata + stat values.
+//  Stats are 0–1 fractions used by the stat bars.
+// ═══════════════════════════════════════════════════════════
+const ROSTER = [
+  {
+    defName:     'BLADE',
+    displayName: 'BLADE',
+    subtitle:    'Balanced Swordfighter',
+    color:       '#b8d4ff',
+    stats: { speed: 0.62, weight: 0.55, power: 0.60, range: 0.80 },
+    description: 'Balanced fighter with long disjointed reach.',
+  },
+  {
+    defName:     'GRUNT',
+    displayName: 'GRUNT',
+    subtitle:    'Heavy Melee Brawler',
+    color:       '#cc6622',
+    stats: { speed: 0.36, weight: 0.92, power: 0.95, range: 0.44 },
+    description: 'Slow but devastating. One hit can end stocks early.',
+  },
+  {
+    defName:     'VEX',
+    displayName: 'VEX',
+    subtitle:    'Lightweight Zoner',
+    color:       '#88ff44',
+    stats: { speed: 0.88, weight: 0.22, power: 0.30, range: 0.85 },
+    description: 'Elusive and projectile-based. Hard to catch, kills late.',
+  },
+];
+
+// ═══════════════════════════════════════════════════════════
+//  MATCH CONFIG
+//  Shared object populated by CharacterSelectScene,
+//  read by GameScene and VictoryScene.
+// ═══════════════════════════════════════════════════════════
+const MatchConfig = {
+  p1RosterIdx:  0,
+  p2RosterIdx:  1,
+  p2IsCPU:      false,
+  stocks:        3,
+  timeLimit:     0,      // 0 = no timer
+  mode:         'vs',    // 'vs' | 'training'
+};
+
+// ═══════════════════════════════════════════════════════════
+//  BASE SCENE
+//  All scenes extend this. SceneManager calls enter/exit/update/render.
+// ═══════════════════════════════════════════════════════════
+class Scene {
+  constructor(name) { this.name = name; this._t = 0; }
+
+  // Called when scene becomes active
+  enter(params) { this._t = 0; }
+
+  // Called when scene is about to be replaced
+  exit() {}
+
+  // Called every animation frame (dt in seconds)
+  update(dt) { this._t += dt; }
+
+  // Render to uiCanvas — must clear first
+  render() {}
+
+  // Called on keydown. e = KeyboardEvent
+  onKey(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SCENE MANAGER
+//  Singleton. Holds the active scene and handles transitions.
+// ═══════════════════════════════════════════════════════════
+class SceneManager {
+  constructor() {
+    this._scene       = null;
+    this._next        = null;
+    this._fadeOut     = 0;     // countdown for fade-to-black before switch
+    this._fadeIn      = 0;     // countdown for fade-from-black after switch
+    this._fadeAlpha   = 0;
+    this.FADE_FRAMES  = 18;    // frames for each half of transition
+  }
+
+  // Register all scenes
+  init(scenes) {
+    this._scenes = {};
+    for (const s of scenes) this._scenes[s.name] = s;
+  }
+
+  // Switch immediately or queue transition
+  goto(name, params={}, instant=false) {
+    if (instant) {
+      if (this._scene) this._scene.exit();
+      this._scene = this._scenes[name];
+      this._scene.enter(params);
+      this._params = null;
+    } else {
+      this._next    = name;
+      this._params  = params;
+      this._fadeOut = this.FADE_FRAMES;
+    }
+  }
+
+  // Resume a scene without calling enter() — used by PauseScene to unfreeze Game
+  resume(name) {
+    if (this._scene) this._scene.exit();
+    this._scene     = this._scenes[name];
+    this._fadeAlpha = 0;
+    this._fadeOut   = 0;
+    this._fadeIn    = 0;
+    // Do NOT call enter() — preserve all game state
+  }
+
+  get current() { return this._scene?.name; }
+
+  update(dt) {
+    // Fade-out phase
+    if (this._fadeOut > 0) {
+      this._fadeOut--;
+      this._fadeAlpha = 1 - this._fadeOut / this.FADE_FRAMES;
+      if (this._fadeOut === 0) {
+        // Execute scene switch
+        if (this._scene) this._scene.exit();
+        this._scene  = this._scenes[this._next];
+        this._fadeIn = this.FADE_FRAMES;
+        this._scene.enter(this._params || {});
+      }
+      this._scene?.update(dt);
+      return;
+    }
+    // Fade-in phase
+    if (this._fadeIn > 0) {
+      this._fadeIn--;
+      this._fadeAlpha = this._fadeIn / this.FADE_FRAMES;
+    } else {
+      this._fadeAlpha = 0;
+    }
+    this._scene?.update(dt);
+  }
+
+  render() {
+    this._scene?.render();
+    // Black fade overlay
+    if (this._fadeAlpha > 0) {
+      uiFillRect(0, 0, UI.w, UI.h, '#000000', this._fadeAlpha);
+    }
+  }
+
+  onKey(e) { this._scene?.onKey(e); }
+}
+
+const SM = new SceneManager();
+
+// ═══════════════════════════════════════════════════════════
+//  MAIN MENU SCENE
+// ═══════════════════════════════════════════════════════════
+class MainMenuScene extends Scene {
+  constructor() {
+    super('MainMenu');
+    this._options  = ['START GAME', 'TRAINING MODE', 'OPTIONS'];
+    this._sel      = 0;
+    this._pulse    = 0;
+  }
+
+  enter() {
+    super.enter();
+    document.getElementById('app').classList.add('menu-active');
+    // Black out game canvas so it doesn't show through
+    ctx.fillStyle = '#080810';
+    ctx.fillRect(0, 0, stage.width, stage.height);
+  }
+
+  exit() {
+    document.getElementById('app').classList.remove('menu-active');
+  }
+
+  update(dt) {
+    super.update(dt);
+    this._pulse += dt * 2.4;
+  }
+
+  render() {
+    const W = UI.w, H = UI.h, CX = UI.cx, CY = UI.cy;
+    uiGridBackground(this._t);
+    uiVignette();
+
+    // ── Title block ───────────────────────────
+    const titleY = H * 0.26;
+    uiText('PLATFORM', CX, titleY - 28, { size: Math.round(W * 0.072), color: '#00ffc8', glow: '#00ffc8' });
+    uiText('FIGHTER',  CX, titleY + 34, { size: Math.round(W * 0.072), color: '#ffffff' });
+
+    // Subtitle
+    uiMonoText('v0.5  —  ENGINE BUILD', CX, titleY + 76, { size: 12, color: '#4a5568' });
+
+    uiSeparator(titleY + 100);
+
+    // ── Menu options ──────────────────────────
+    const optY    = H * 0.56;
+    const spacing = 58;
+
+    this._options.forEach((opt, i) => {
+      const y      = optY + i * spacing;
+      const active = i === this._sel;
+
+      if (active) {
+        // Selection background
+        const barW = 340;
+        uiFillRect(CX - barW/2, y - 22, barW, 44, '#00ffc8', 0.10);
+        uiRect(CX - barW/2, y - 22, barW, 44, '#00ffc8', 1.5, 0.6);
+        // Selector arrow
+        const arrowPulse = 0.7 + 0.3 * Math.sin(this._pulse);
+        uiText('▶', CX - 190, y, { size: 16, color: '#00ffc8', alpha: arrowPulse });
+        uiText(opt, CX, y, { size: 22, color: '#ffffff', glow: '#00ffc8' });
+      } else {
+        const disabled = i === 2; // OPTIONS is placeholder
+        uiText(opt, CX, y, { size: 18, color: disabled ? '#2a3040' : '#4a6080' });
+      }
+    });
+
+    // ── Footer ────────────────────────────────
+    uiMonoText('↑↓ NAVIGATE  •  ENTER SELECT', CX, H - 40, { size: 11, color: '#2a3040' });
+
+    uiScanlines();
+  }
+
+  onKey(e) {
+    if (e.code === 'ArrowUp'   || e.code === 'KeyW') {
+      this._sel = (this._sel - 1 + this._options.length) % this._options.length;
+    }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+      this._sel = (this._sel + 1) % this._options.length;
+    }
+    if (e.code === 'Enter' || e.code === 'Space') {
+      if (this._sel === 0) { MatchConfig.mode = 'vs';       SM.goto('CharSelect'); }
+      if (this._sel === 1) { MatchConfig.mode = 'training'; SM.goto('CharSelect'); }
+      if (this._sel === 2) { /* OPTIONS — placeholder */ }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CHARACTER SELECT SCENE
+// ═══════════════════════════════════════════════════════════
+class CharacterSelectScene extends Scene {
+  constructor() {
+    super('CharSelect');
+    this._p1Sel     = 0;
+    this._p2Sel     = 1;
+    this._p2CPU     = false;
+    this._phase     = 'p1';   // 'p1' | 'p2' | 'confirm'
+    this._confirmPulse = 0;
+  }
+
+  enter() {
+    super.enter();
+    this._phase        = 'p1';
+    this._confirmPulse = 0;
+    document.getElementById('app').classList.add('menu-active');
+  }
+
+  exit() {
+    document.getElementById('app').classList.remove('menu-active');
+  }
+
+  update(dt) {
+    super.update(dt);
+    this._confirmPulse += dt * 3;
+  }
+
+  render() {
+    const W = UI.w, H = UI.h, CX = UI.cx;
+
+    uiGridBackground(this._t * 0.3);
+    uiVignette();
+
+    // ── Header ────────────────────────────────
+    uiText('SELECT FIGHTER', CX, H * 0.10, { size: Math.round(W * 0.028), color: '#00ffc8', glow: '#00ffc8' });
+
+    const phaseLabels = { p1: 'PLAYER 1  —  CHOOSE YOUR FIGHTER', p2: 'PLAYER 2  —  CHOOSE YOUR FIGHTER', confirm: 'CONFIRM SELECTIONS' };
+    uiMonoText(phaseLabels[this._phase], CX, H * 0.17, { size: 13, color: '#4a6080' });
+
+    uiSeparator(H * 0.20);
+
+    // ── Character cards ───────────────────────
+    const cardW   = Math.min(220, W * 0.22);
+    const cardH   = Math.min(280, H * 0.46);
+    const gap     = Math.min(40, W * 0.03);
+    const totalW  = ROSTER.length * cardW + (ROSTER.length - 1) * gap;
+    const startX  = CX - totalW / 2;
+    const cardY   = H * 0.27;
+
+    ROSTER.forEach((char, i) => {
+      const x = startX + i * (cardW + gap);
+      const isP1 = this._p1Sel === i;
+      const isP2 = this._p2Sel === i;
+      const isActiveSelection = (this._phase === 'p1' && i === this._p1Sel) ||
+                                (this._phase === 'p2' && i === this._p2Sel);
+
+      // Card background
+      uiFillRect(x, cardY, cardW, cardH, '#0d0d1a');
+      uiRect(x, cardY, cardW, cardH,
+        isP1 && isP2 ? '#ffffff' :
+        isP1 ? '#00c8ff' :
+        isP2 ? '#ff6b35' : '#1e1e38',
+        isActiveSelection ? 2.5 : 1.5,
+        isActiveSelection ? 1.0 : 0.5);
+
+      // Fighter silhouette / color block
+      const silH = cardH * 0.38;
+      uiFillRect(x + 16, cardY + 14, cardW - 32, silH, char.color, 0.12);
+      // Fighter body rect (stylized)
+      const bw = cardW * 0.28, bh = cardH * 0.30;
+      const bx = x + (cardW - bw) / 2;
+      const by = cardY + 18;
+      uiFillRect(bx, by, bw, bh, char.color, 0.6);
+      uiRect(bx, by, bw, bh, char.color, 1.5, 0.8);
+      // "Eye"
+      const eyeX = bx + bw * 0.72, eyeY = by + bh * 0.28;
+      uiFillRect(eyeX - 3, eyeY - 3, 6, 6, '#ffffff', 0.9);
+
+      // Character name
+      uiText(char.displayName, x + cardW/2, cardY + silH + 22,
+        { size: 16, color: char.color, font: 'Orbitron', glow: isActiveSelection ? char.color : null });
+
+      // Subtitle
+      uiMonoText(char.subtitle, x + cardW/2, cardY + silH + 44, { size: 9, color: '#4a5568' });
+
+      // Stat bars
+      const statsY = cardY + silH + 62;
+      const barW2  = cardW - 80;
+      uiStatBar('SPD', char.stats.speed,  x + 8, statsY,      barW2, '#00c8ff');
+      uiStatBar('WGT', char.stats.weight, x + 8, statsY + 18, barW2, '#ff6b35');
+      uiStatBar('PWR', char.stats.power,  x + 8, statsY + 36, barW2, '#ff2244');
+      uiStatBar('RNG', char.stats.range,  x + 8, statsY + 54, barW2, '#88ff44');
+
+      // Player badges
+      const badgeY = cardY + cardH - 26;
+      if (isP1 && isP2) {
+        uiMonoText('P1 + P2', x + cardW/2, badgeY, { size: 11, color: '#ffffff' });
+      } else if (isP1) {
+        uiMonoText('P1', x + cardW/2, badgeY, { size: 11, color: '#00c8ff' });
+      } else if (isP2) {
+        const lbl = this._p2CPU ? 'CPU' : 'P2';
+        uiMonoText(lbl, x + cardW/2, badgeY, { size: 11, color: '#ff6b35' });
+      }
+    });
+
+    // ── Player preview row ────────────────────
+    const previewY = H * 0.80;
+    const p1Char   = ROSTER[this._p1Sel];
+    const p2Char   = ROSTER[this._p2Sel];
+
+    // P1 side
+    uiText('P1', CX * 0.45, previewY, { size: 14, color: '#00c8ff' });
+    uiMonoText(p1Char.displayName, CX * 0.45, previewY + 22, { size: 13, color: '#c8d8e8' });
+    if (this._phase !== 'p1') {
+      uiMonoText('✓ LOCKED', CX * 0.45, previewY + 40, { size: 10, color: '#00ffc8' });
+    }
+
+    // VS divider
+    uiText('VS', CX, previewY + 10, { size: 20, color: '#4a5568' });
+
+    // P2 side
+    const p2Label = this._p2CPU ? 'CPU' : 'P2';
+    uiText(p2Label, CX * 1.55, previewY, { size: 14, color: '#ff6b35' });
+    uiMonoText(p2Char.displayName, CX * 1.55, previewY + 22, { size: 13, color: '#c8d8e8' });
+    if (this._phase === 'confirm') {
+      uiMonoText('✓ LOCKED', CX * 1.55, previewY + 40, { size: 10, color: '#00ffc8' });
+    }
+
+    // ── CPU toggle hint (during p2 phase) ────
+    if (this._phase === 'p2') {
+      uiMonoText(`CPU: ${this._p2CPU ? 'ON ←[C] toggle' : 'OFF  [C] toggle'}`,
+        CX, H * 0.90, { size: 11, color: this._p2CPU ? '#ffee00' : '#2a3040' });
+    }
+
+    // ── Controls hint ─────────────────────────
+    const hints = {
+      p1:      '← → CHOOSE  •  ENTER CONFIRM',
+      p2:      '← → CHOOSE  •  ENTER CONFIRM  •  ESC BACK',
+      confirm: 'ENTER START MATCH  •  ESC BACK',
+    };
+    const confirmPulse = this._phase === 'confirm' ? 0.6 + 0.4 * Math.sin(this._confirmPulse) : 1;
+    uiMonoText(hints[this._phase], CX, H - 40, { size: 12, color: '#2a3040', alpha: confirmPulse });
+
+    uiScanlines();
+  }
+
+  onKey(e) {
+    if (this._phase === 'p1') {
+      if (e.code === 'ArrowLeft')  this._p1Sel = (this._p1Sel - 1 + ROSTER.length) % ROSTER.length;
+      if (e.code === 'ArrowRight') this._p1Sel = (this._p1Sel + 1) % ROSTER.length;
+      if (e.code === 'Enter' || e.code === 'Space') this._phase = 'p2';
+      if (e.code === 'Escape') SM.goto('MainMenu');
+    } else if (this._phase === 'p2') {
+      if (e.code === 'ArrowLeft')  this._p2Sel = (this._p2Sel - 1 + ROSTER.length) % ROSTER.length;
+      if (e.code === 'ArrowRight') this._p2Sel = (this._p2Sel + 1) % ROSTER.length;
+      if (e.code === 'KeyC')       this._p2CPU = !this._p2CPU;
+      if (e.code === 'Enter' || e.code === 'Space') this._phase = 'confirm';
+      if (e.code === 'Escape') this._phase = 'p1';
+    } else if (this._phase === 'confirm') {
+      if (e.code === 'Enter' || e.code === 'Space') {
+        MatchConfig.p1RosterIdx = this._p1Sel;
+        MatchConfig.p2RosterIdx = this._p2Sel;
+        MatchConfig.p2IsCPU     = this._p2CPU;
+        SM.goto('Game');
+      }
+      if (e.code === 'Escape') this._phase = 'p2';
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GAME SCENE
+//  Wraps the existing fighter engine. Manages stock counts,
+//  timer, in-game HUD drawn on uiCanvas, and win detection.
+// ═══════════════════════════════════════════════════════════
+class GameScene extends Scene {
+  constructor() {
+    super('Game');
+    this._stocks     = [3, 3];
+    this._timer      = 0;
+    this._timeLimit  = 0;
+    this._paused     = false;
+    this._ticksSinceStart = 0;
+    this._prevDamage = [0, 0];
+    this._dmgFlash   = [0, 0];   // flash timer per player
+  }
+
+  enter(params) {
+    super.enter();
+    // Apply MatchConfig character choices
+    const p1Def = ROSTER[MatchConfig.p1RosterIdx].defName;
+    const p2Def = ROSTER[MatchConfig.p2RosterIdx].defName;
+
+    // Reinitialise fighters with selected characters
+    fighters[0] = new Fighter(p1Def, 260, 300, fighters[0].controls);
+    fighters[1] = new Fighter(p2Def, 620, 300, fighters[1].controls);
+
+    // Stock reset
+    this._stocks     = [MatchConfig.stocks, MatchConfig.stocks];
+    this._timer      = 0;
+    this._timeLimit  = MatchConfig.timeLimit;
+    this._ticksSinceStart = 0;
+    this._prevDamage = [fighters[0].damage, fighters[1].damage];
+    this._dmgFlash   = [0, 0];
+    hitCount         = 0;
+    totalTick        = 0;
+    accumulator      = 0;
+
+    document.getElementById('app').classList.remove('menu-active');
+  }
+
+  _resetFighter(idx) {
+    const defName = ROSTER[idx === 0 ? MatchConfig.p1RosterIdx : MatchConfig.p2RosterIdx].defName;
+    const ctl     = fighters[idx].controls;
+    fighters[idx] = new Fighter(defName, idx === 0 ? 260 : 620, 80, ctl);
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (this._paused) return;
+
+    // Timer
+    if (this._timeLimit > 0) this._timer += dt;
+
+    // Fixed-timestep physics (same as old loop)
+    accumulator += dt;
+    while (accumulator >= FIXED_DT) {
+      gamePhysicsTick();
+      this._ticksSinceStart++;
+      accumulator -= FIXED_DT;
+    }
+
+    // Damage flash detection
+    fighters.forEach((f, i) => {
+      if (f.damage !== this._prevDamage[i]) {
+        this._dmgFlash[i] = 40;
+        this._prevDamage[i] = f.damage;
+      }
+      if (this._dmgFlash[i] > 0) this._dmgFlash[i]--;
+    });
+
+    // Blast zone → lose a stock (detected via _blasted flag set by engine)
+    fighters.forEach((f, i) => {
+      if (f._blasted) {
+        f._blasted = false;   // clear flag
+        this._stocks[i] = Math.max(0, this._stocks[i] - 1);
+        if (this._stocks[i] > 0) {
+          this._resetFighter(i);
+        } else {
+          // Park off-screen so engine doesn't keep triggering; GameScene will transition
+          f.x = -999; f.y = -999;
+        }
+      }
+    });
+
+    // Win condition
+    const p1Dead = this._stocks[0] <= 0;
+    const p2Dead = this._stocks[1] <= 0;
+    const timeUp = this._timeLimit > 0 && this._timer >= this._timeLimit;
+
+    if (p1Dead || p2Dead || timeUp) {
+      const winner = p1Dead ? 1 : p2Dead ? 0 : (fighters[0].damage < fighters[1].damage ? 0 : 1);
+      SM.goto('Victory', {
+        winner,
+        stocks: [...this._stocks],
+        p1Name: ROSTER[MatchConfig.p1RosterIdx].displayName,
+        p2Name: ROSTER[MatchConfig.p2RosterIdx].displayName,
+      });
+    }
+  }
+
+  render() {
+    // Draw game world onto game canvas (existing engine)
+    render();   // drawBackground / drawPlatforms / drawLedges / fighters.draw
+
+    // Draw in-game HUD onto UI canvas (pure canvas, no DOM)
+    uiCtx.clearRect(0, 0, UI.w, UI.h);
+    this._drawInGameHUD();
+  }
+
+  _drawInGameHUD() {
+    const W = UI.w, H = UI.h;
+    const p1 = fighters[0], p2 = fighters[1];
+    const p1Color = ROSTER[MatchConfig.p1RosterIdx].color;
+    const p2Color = ROSTER[MatchConfig.p2RosterIdx].color;
+
+    // ── Percent displays ─────────────────────
+    // P1 (left side)
+    this._drawPlayerHUD(p1, 0, W * 0.14, H * 0.04, 'left', p1Color);
+    // P2 (right side)
+    this._drawPlayerHUD(p2, 1, W * 0.86, H * 0.04, 'right', p2Color);
+
+    // ── Timer ────────────────────────────────
+    if (this._timeLimit > 0) {
+      const remaining = Math.max(0, this._timeLimit - this._timer);
+      const m = Math.floor(remaining / 60);
+      const s = Math.floor(remaining % 60);
+      const tStr = `${m}:${s.toString().padStart(2,'0')}`;
+      uiFillRect(W/2 - 44, 8, 88, 38, '#0a0a1a', 0.85);
+      uiRect(W/2 - 44, 8, 88, 38, '#1e1e38');
+      uiText(tStr, W/2, 28, { size: 18, color: remaining < 30 ? '#ff2244' : '#c8d8e8' });
+    }
+
+    // ── Stocks ────────────────────────────────
+    this._drawStocks(0, W * 0.14, H * 0.04 + 68, p1Color);
+    this._drawStocks(1, W * 0.86, H * 0.04 + 68, p2Color, true);
+  }
+
+  _drawPlayerHUD(fighter, idx, x, y, side, color) {
+    const W = UI.w;
+    const boxW = 190, boxH = 62;
+    const bx = side === 'left' ? x : x - boxW;
+
+    // Panel background
+    uiFillRect(bx, y, boxW, boxH, '#0a0a1a', 0.85);
+    uiFillRect(bx, y, side === 'left' ? 3 : 0, boxH, color, 0.9);
+    uiFillRect(bx + (side === 'left' ? 0 : boxW - 3), y, 3, boxH, color, 0.9);
+    uiRect(bx, y, boxW, boxH, '#1e1e38');
+
+    // Player label
+    const label = idx === 0 ? 'P1' : (MatchConfig.p2IsCPU ? 'CPU' : 'P2');
+    uiMonoText(label, bx + (side === 'left' ? 12 : boxW - 12), y + 14,
+      { size: 11, color, align: side === 'left' ? 'left' : 'right' });
+
+    // Character name
+    const charName = ROSTER[idx === 0 ? MatchConfig.p1RosterIdx : MatchConfig.p2RosterIdx].displayName;
+    uiMonoText(charName, bx + (side === 'left' ? 12 : boxW - 12), y + 28,
+      { size: 10, color: '#4a5568', align: side === 'left' ? 'left' : 'right' });
+
+    // Damage percent — big number
+    const dmg    = Math.round(fighter.damage);
+    const flash  = this._dmgFlash[idx] > 0;
+    const dmgCol = flash ? '#ffffff' : dmg > 100 ? '#ff2244' : dmg > 60 ? '#ffee00' : color;
+    const dmgStr = `${dmg}%`;
+    const dmgX   = side === 'left' ? bx + boxW - 14 : bx + 14;
+    uiText(dmgStr, dmgX, y + 38, { size: 22, color: dmgCol, align: side === 'left' ? 'right' : 'left',
+      glow: flash ? '#ffffff' : dmg > 100 ? '#ff2244' : null });
+  }
+
+  _drawStocks(idx, x, y, color, rightAlign=false) {
+    const stocks  = this._stocks[idx];
+    const maxSt   = MatchConfig.stocks;
+    const dotR    = 7;
+    const dotGap  = 18;
+    const totalW  = maxSt * dotR * 2 + (maxSt - 1) * (dotGap - dotR * 2);
+    const startX  = rightAlign ? x - totalW : x;
+
+    for (let i = 0; i < maxSt; i++) {
+      const dx = startX + i * dotGap + dotR;
+      const alive = i < stocks;
+      uiCtx.save();
+      uiCtx.beginPath();
+      uiCtx.arc(dx, y, dotR, 0, Math.PI * 2);
+      if (alive) {
+        uiCtx.shadowColor = color; uiCtx.shadowBlur = 10;
+        uiCtx.fillStyle   = color;
+        uiCtx.fill();
+      } else {
+        uiCtx.strokeStyle = '#2a3040'; uiCtx.lineWidth = 1.5;
+        uiCtx.stroke();
+      }
+      uiCtx.shadowBlur = 0;
+      uiCtx.restore();
+    }
+  }
+
+  onKey(e) {
+    // Pause key — instant switch preserves game state, PauseScene.enter() only resets menu sel
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+      SM.goto('Pause', {}, true);
+      return;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PAUSE SCENE
+//  Semi-transparent overlay on top of the frozen game state.
+//  Uses instant (no-fade) transition back to Game.
+// ═══════════════════════════════════════════════════════════
+class PauseScene extends Scene {
+  constructor() {
+    super('Pause');
+    this._options = ['RESUME', 'RESTART MATCH', 'CHARACTER SELECT', 'MAIN MENU'];
+    this._sel     = 0;
+    this._pulse   = 0;
+  }
+
+  enter() {
+    super.enter();
+    this._sel   = 0;
+    this._pulse = 0;
+  }
+
+  update(dt) {
+    super.update(dt);
+    this._pulse += dt * 2.5;
+  }
+
+  render() {
+    // Re-render frozen game world on game canvas
+    render();
+    // Clear UI canvas and draw semi-transparent overlay
+    uiCtx.clearRect(0, 0, UI.w, UI.h);
+
+    const W = UI.w, H = UI.h, CX = UI.cx, CY = UI.cy;
+
+    // Dark overlay
+    uiFillRect(0, 0, W, H, '#000000', 0.62);
+
+    // Panel
+    const pW = 380, pH = 340;
+    const px = CX - pW/2, py = CY - pH/2;
+    uiFillRect(px, py, pW, pH, '#080810', 0.97);
+    uiRect(px, py, pW, pH, '#00ffc8', 2, 0.5);
+
+    // Title
+    uiText('PAUSED', CX, py + 52, { size: 32, color: '#00ffc8', glow: '#00ffc8' });
+    uiSeparator(py + 82);
+
+    // Options
+    const optY    = py + 126;
+    const spacing = 54;
+    this._options.forEach((opt, i) => {
+      const y      = optY + i * spacing;
+      const active = i === this._sel;
+      if (active) {
+        uiFillRect(px + 20, y - 18, pW - 40, 36, '#00ffc8', 0.09);
+        const arrowAlpha = 0.6 + 0.4 * Math.sin(this._pulse);
+        uiText('▶', CX - 150, y, { size: 14, color: '#00ffc8', alpha: arrowAlpha });
+        uiText(opt, CX, y, { size: 18, color: '#ffffff', glow: '#00ffc8' });
+      } else {
+        uiText(opt, CX, y, { size: 16, color: '#4a6080' });
+      }
+    });
+
+    uiMonoText('↑↓ NAVIGATE  •  ENTER SELECT  •  ESC RESUME', CX, py + pH - 24,
+      { size: 10, color: '#2a3040' });
+  }
+
+  onKey(e) {
+    if (e.code === 'Escape') { SM.resume('Game'); return; }
+    if (e.code === 'ArrowUp'   || e.code === 'KeyW') this._sel = (this._sel - 1 + this._options.length) % this._options.length;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') this._sel = (this._sel + 1) % this._options.length;
+    if (e.code === 'Enter' || e.code === 'Space') {
+      if (this._sel === 0) { SM.resume('Game');             }  // Resume — no re-init
+      if (this._sel === 1) { SM.goto('Game');               }  // Restart — calls enter(), reinits
+      if (this._sel === 2) { SM.goto('CharSelect');         }
+      if (this._sel === 3) { SM.goto('MainMenu');           }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  VICTORY SCENE
+// ═══════════════════════════════════════════════════════════
+class VictoryScene extends Scene {
+  constructor() {
+    super('Victory');
+    this._options = ['REMATCH', 'CHARACTER SELECT', 'MAIN MENU'];
+    this._sel     = 0;
+    this._winner  = 0;
+    this._stocks  = [0, 0];
+    this._pulse   = 0;
+    this._p1Name  = 'P1';
+    this._p2Name  = 'P2';
+  }
+
+  enter(params={}) {
+    super.enter();
+    this._winner = params.winner ?? 0;
+    this._stocks = params.stocks ?? [0, 0];
+    this._p1Name = params.p1Name ?? 'P1';
+    this._p2Name = params.p2Name ?? 'P2';
+    this._sel    = 0;
+    this._pulse  = 0;
+    document.getElementById('app').classList.add('menu-active');
+  }
+
+  exit() {
+    document.getElementById('app').classList.remove('menu-active');
+  }
+
+  update(dt) {
+    super.update(dt);
+    this._pulse += dt * 2;
+  }
+
+  render() {
+    const W = UI.w, H = UI.h, CX = UI.cx, CY = UI.cy;
+    const winnerChar = ROSTER[this._winner === 0 ? MatchConfig.p1RosterIdx : MatchConfig.p2RosterIdx];
+    const winnerName = this._winner === 0 ? this._p1Name : this._p2Name;
+    const winnerLabel= this._winner === 0 ? 'P1' : (MatchConfig.p2IsCPU ? 'CPU' : 'P2');
+
+    uiGridBackground(this._t * 0.2);
+    uiVignette();
+
+    // ── Winner announcement ───────────────────
+    const glowPulse = 0.7 + 0.3 * Math.sin(this._pulse);
+    uiCtx.save();
+    uiCtx.globalAlpha = 0.45 * glowPulse;
+    const grad = uiCtx.createRadialGradient(CX, H * 0.35, 0, CX, H * 0.35, 240);
+    grad.addColorStop(0, winnerChar.color);
+    grad.addColorStop(1, 'transparent');
+    uiCtx.fillStyle = grad;
+    uiCtx.fillRect(0, 0, W, H * 0.7);
+    uiCtx.restore();
+
+    uiMonoText('WINNER', CX, H * 0.20, { size: 16, color: '#4a5568' });
+
+    uiText(winnerLabel, CX, H * 0.30,
+      { size: Math.round(W * 0.055), color: winnerChar.color, glow: winnerChar.color });
+    uiText(winnerName, CX, H * 0.43,
+      { size: Math.round(W * 0.04), color: '#ffffff' });
+
+    uiSeparator(H * 0.52);
+
+    // ── Stock summary ─────────────────────────
+    const sumY = H * 0.58;
+    // P1
+    uiMonoText(this._p1Name, CX * 0.58, sumY, { size: 13, color: '#00c8ff' });
+    for (let i = 0; i < MatchConfig.stocks; i++) {
+      const alive = i < this._stocks[0];
+      const dx = CX * 0.58 - (MatchConfig.stocks * 9) + i * 18;
+      uiCtx.save();
+      uiCtx.beginPath();
+      uiCtx.arc(dx, sumY + 20, 7, 0, Math.PI * 2);
+      uiCtx.fillStyle = alive ? '#00c8ff' : '#1e1e38';
+      uiCtx.fill();
+      uiCtx.restore();
+    }
+    // P2
+    const p2Label = MatchConfig.p2IsCPU ? 'CPU' : this._p2Name;
+    uiMonoText(p2Label, CX * 1.42, sumY, { size: 13, color: '#ff6b35' });
+    for (let i = 0; i < MatchConfig.stocks; i++) {
+      const alive = i < this._stocks[1];
+      const dx = CX * 1.42 - (MatchConfig.stocks * 9) + i * 18;
+      uiCtx.save();
+      uiCtx.beginPath();
+      uiCtx.arc(dx, sumY + 20, 7, 0, Math.PI * 2);
+      uiCtx.fillStyle = alive ? '#ff6b35' : '#1e1e38';
+      uiCtx.fill();
+      uiCtx.restore();
+    }
+
+    uiSeparator(H * 0.68);
+
+    // ── Options ───────────────────────────────
+    const optY    = H * 0.75;
+    const spacing = 52;
+    this._options.forEach((opt, i) => {
+      const y      = optY + i * spacing;
+      const active = i === this._sel;
+      if (active) {
+        const barW = 340;
+        uiFillRect(CX - barW/2, y - 18, barW, 36, '#00ffc8', 0.09);
+        uiRect(CX - barW/2, y - 18, barW, 36, '#00ffc8', 1.5, 0.5);
+        const ap = 0.6 + 0.4 * Math.sin(this._pulse);
+        uiText('▶', CX - 165, y, { size: 14, color: '#00ffc8', alpha: ap });
+        uiText(opt, CX, y, { size: 19, color: '#ffffff', glow: '#00ffc8' });
+      } else {
+        uiText(opt, CX, y, { size: 16, color: '#4a6080' });
+      }
+    });
+
+    uiMonoText('↑↓ NAVIGATE  •  ENTER SELECT', CX, H - 34, { size: 11, color: '#2a3040' });
+    uiScanlines();
+  }
+
+  onKey(e) {
+    if (e.code === 'ArrowUp'   || e.code === 'KeyW') this._sel = (this._sel - 1 + this._options.length) % this._options.length;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') this._sel = (this._sel + 1) % this._options.length;
+    if (e.code === 'Enter' || e.code === 'Space') {
+      if (this._sel === 0) SM.goto('Game');
+      if (this._sel === 1) SM.goto('CharSelect');
+      if (this._sel === 2) SM.goto('MainMenu');
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  REGISTER SCENES + INITIAL ROUTE
+// ═══════════════════════════════════════════════════════════
+SM.init([
+  new MainMenuScene(),
+  new CharacterSelectScene(),
+  new GameScene(),
+  new PauseScene(),
+  new VictoryScene(),
+]);
+
+// Route all keydown events through the active scene
+window.addEventListener('keydown', e => {
+  if (e.code === 'Tab') return;  // Tab is debug-mode, handled separately
+  SM.onKey(e);
+});
+
+// Boot into Main Menu
+SM.goto('MainMenu', {}, true);
+
+// ═══════════════════════════════════════════════════════════
+//  MASTER LOOP
+//  All timing, updating, and rendering flows through here.
+// ═══════════════════════════════════════════════════════════
+function loop(timestamp) {
+  requestAnimationFrame(loop);
+  if (prevTime === null) { prevTime = timestamp; return; }
+
+  let rawDt = Math.min((timestamp - prevTime) / 1000, 0.1);
+  prevTime  = timestamp;
+
+  fpsAccum += rawDt; fpsFrames++;
+  if (fpsAccum >= 0.5) { displayFps = Math.round(fpsFrames / fpsAccum); fpsAccum = fpsFrames = 0; }
+
+  SM.update(rawDt);   // runs all physics ticks (may be multiple per frame)
+  clearJust();        // clear justPressed ONCE after all ticks — never drops inputs mid-batch
+  SM.render();
 }
 
 requestAnimationFrame(loop);
