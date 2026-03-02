@@ -174,7 +174,7 @@
 
   <div id="hud">
     <div class="fighter-panel p1">
-      <div class="name">BLAZE</div>
+      <div class="name">BLADE</div>
       <div class="dmg-counter" id="p1-dmg">0%</div>
       <div class="stat-row">STATE  <span class="stat-val" id="p1-state">IDLE</span></div>
       <div class="stat-row">MOVE   <span class="stat-val" id="p1-move">—</span></div>
@@ -194,33 +194,28 @@
         <div><span class="key">← / →</span> Move P2</div>
         <div><span class="key">W</span> Jump P1</div>
         <div><span class="key">↑</span> Jump P2</div>
-        <div><span class="key">S</span> Fast Fall / Down</div>
+        <div><span class="key">S</span> Fast Fall P1</div>
         <div><span class="key">↓</span> Fast Fall P2</div>
-        <div><span class="key">J</span> Jab P1</div>
-        <div><span class="key">Num1</span> Jab P2</div>
-        <div><span class="key">K</span> Tilt/Fair P1</div>
-        <div><span class="key">Num2</span> Tilt/Fair P2</div>
-        <div><span class="key">L</span> U-Tilt/Uair P1</div>
-        <div><span class="key">Num3</span> U-Tilt/Uair P2</div>
-        <div><span class="key">;</span> D-Tilt/Dair P1</div>
-        <div><span class="key">Num4</span> D-Tilt/Dair P2</div>
+        <div><span class="key">J</span> Normal P1</div>
+        <div><span class="key">Num1</span> Normal P2</div>
+        <div><span class="key">K</span> Special P1</div>
+        <div><span class="key">Num2</span> Special P2</div>
+        <div><span class="key">L</span> Grab P1</div>
+        <div><span class="key">Num3</span> Grab P2</div>
         <div><span class="key">F</span> Shield P1</div>
         <div><span class="key">Num5</span> Shield P2</div>
-        <div><span class="key">G</span> Roll/AirDodge P1</div>
-        <div><span class="key">Num6</span> Roll/AirDodge P2</div>
+        <div><span class="key">G</span> Dodge P1</div>
+        <div><span class="key">Num6</span> Dodge P2</div>
       </div>
-      <div class="legend">
-        <div class="legend-item"><div class="swatch" style="background:var(--startup)"></div>Startup</div>
-        <div class="legend-item"><div class="swatch" style="background:var(--active)"></div>Active</div>
-        <div class="legend-item"><div class="swatch" style="background:var(--endlag)"></div>Endlag</div>
-        <div class="legend-item"><div class="swatch" style="background:rgba(255,50,70,0.8)"></div>Hitbox</div>
-        <div class="legend-item"><div class="swatch" style="background:rgba(0,200,255,0.5)"></div>Hurtbox</div>
-        <div class="legend-item"><div class="swatch" style="background:rgba(80,160,255,0.6)"></div>Shield</div>
+      <div class="legend" style="margin-top:8px;font-size:8px;color:var(--dim);text-align:center;line-height:1.7">
+        <div>NORMAL: ground=Jab / dir+ground=Smash</div>
+        <div>NORMAL air: dir=aerial / neutral=Nair</div>
+        <div>SPECIAL+dir: ↑Up ↓Down ←→Side / Neutral</div>
       </div>
     </div>
 
     <div class="fighter-panel p2">
-      <div class="name">FROST</div>
+      <div class="name">GRUNT</div>
       <div class="dmg-counter" id="p2-dmg">0%</div>
       <div class="stat-row">STATE  <span class="stat-val" id="p2-state">IDLE</span></div>
       <div class="stat-row">MOVE   <span class="stat-val" id="p2-move">—</span></div>
@@ -641,115 +636,6 @@ class Ledge {
 // ═══════════════════════════════════════════════════════════
 const MOVESETS = {
 
-  // ──────────────────── BLAZE ────────────────────
-  BLAZE: {
-    jab: {
-      id:'jab', aerial:false,
-      startup:3, active:4, endlag:8, landLag:0,
-      damage:3, angle:30, baseKb:120, kbGrowth:4,
-      hitbox:{ ox:10, oy:4, w:32, h:22 }, hurtboxMod:null,
-      sfxColor:'#ffee00', locksMovement:false,
-    },
-    ftilt: {
-      id:'ftilt', aerial:false,
-      startup:7, active:5, endlag:14, landLag:0,
-      damage:8, angle:25, baseKb:200, kbGrowth:9,
-      hitbox:{ ox:14, oy:8, w:44, h:28 }, hurtboxMod:null,
-      sfxColor:'#ff8800', locksMovement:false,
-    },
-    utilt: {
-      id:'utilt', aerial:false,
-      startup:6, active:6, endlag:12, landLag:0,
-      damage:7, angle:88, baseKb:180, kbGrowth:8,
-      hitbox:{ ox:-4, oy:-34, w:44, h:36 }, hurtboxMod:null,
-      sfxColor:'#ff4488', locksMovement:false,
-    },
-    dtilt: {
-      id:'dtilt', aerial:false,
-      startup:5, active:4, endlag:10, landLag:0,
-      damage:6, angle:15, baseKb:140, kbGrowth:7,
-      hitbox:{ ox:8, oy:28, w:40, h:20 },
-      // crouch shrinks hurtbox during dtilt
-      hurtboxMod:{ ox:0, oy:16, w:36, h:36 },
-      sfxColor:'#44ffaa', locksMovement:false,
-    },
-    fair: {
-      id:'fair', aerial:true,
-      startup:8, active:6, endlag:16, landLag:12,
-      damage:10, angle:20, baseKb:220, kbGrowth:10,
-      hitbox:{ ox:14, oy:2, w:46, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff2244', locksMovement:false,
-    },
-    uair: {
-      id:'uair', aerial:true,
-      startup:7, active:7, endlag:14, landLag:10,
-      damage:9, angle:82, baseKb:200, kbGrowth:9,
-      hitbox:{ ox:-8, oy:-40, w:52, h:40 }, hurtboxMod:null,
-      sfxColor:'#cc44ff', locksMovement:false,
-    },
-    dair: {
-      id:'dair', aerial:true,
-      startup:10, active:8, endlag:18, landLag:20,
-      damage:12, angle:270, baseKb:260, kbGrowth:8,
-      hitbox:{ ox:-6, oy:38, w:48, h:30 }, hurtboxMod:null,
-      sfxColor:'#00eeff', locksMovement:true,
-    },
-  },
-
-  // ──────────────────── FROST ────────────────────
-  FROST: {
-    jab: {
-      id:'jab', aerial:false,
-      startup:4, active:3, endlag:10, landLag:0,
-      damage:4, angle:45, baseKb:100, kbGrowth:5,
-      hitbox:{ ox:12, oy:6, w:30, h:24 }, hurtboxMod:null,
-      sfxColor:'#ffee00', locksMovement:false,
-    },
-    ftilt: {
-      id:'ftilt', aerial:false,
-      startup:9, active:6, endlag:16, landLag:0,
-      damage:10, angle:35, baseKb:240, kbGrowth:10,
-      hitbox:{ ox:16, oy:4, w:50, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff8800', locksMovement:true,
-    },
-    utilt: {
-      id:'utilt', aerial:false,
-      startup:5, active:8, endlag:10, landLag:0,
-      damage:6, angle:90, baseKb:160, kbGrowth:7,
-      hitbox:{ ox:-6, oy:-38, w:52, h:40 }, hurtboxMod:null,
-      sfxColor:'#ff4488', locksMovement:false,
-    },
-    dtilt: {
-      id:'dtilt', aerial:false,
-      startup:4, active:5, endlag:8, landLag:0,
-      damage:5, angle:10, baseKb:120, kbGrowth:6,
-      hitbox:{ ox:10, oy:32, w:44, h:18 },
-      hurtboxMod:{ ox:0, oy:14, w:40, h:34 },
-      sfxColor:'#44ffaa', locksMovement:false,
-    },
-    fair: {
-      id:'fair', aerial:true,
-      startup:6, active:5, endlag:18, landLag:14,
-      damage:9, angle:15, baseKb:200, kbGrowth:9,
-      hitbox:{ ox:16, oy:6, w:42, h:28 }, hurtboxMod:null,
-      sfxColor:'#ff2244', locksMovement:false,
-    },
-    uair: {
-      id:'uair', aerial:true,
-      startup:9, active:9, endlag:12, landLag:8,
-      damage:11, angle:85, baseKb:220, kbGrowth:11,
-      hitbox:{ ox:-10, oy:-44, w:60, h:44 }, hurtboxMod:null,
-      sfxColor:'#cc44ff', locksMovement:false,
-    },
-    dair: {
-      id:'dair', aerial:true,
-      startup:8, active:10, endlag:14, landLag:16,
-      damage:8, angle:260, baseKb:180, kbGrowth:7,
-      hitbox:{ ox:-4, oy:34, w:48, h:28 }, hurtboxMod:null,
-      sfxColor:'#00eeff', locksMovement:true,
-    },
-  },
-
   // ╔═══════════════════════════════════════════════════════╗
   // ║  BLADE — Balanced Swordfighter                        ║
   // ║  Philosophy: moderate frame data, disjointed range,   ║
@@ -768,37 +654,6 @@ const MOVESETS = {
       damage:5, angle:35, baseKb:100, kbGrowth:5,
       hitbox:{ ox:16, oy:2, w:44, h:20 }, hurtboxMod:null,
       sfxColor:'#c8e0ff', locksMovement:false,
-    },
-
-    // Forward Tilt — mid-range horizontal slash. Combo starter at low %.
-    // startup 8 | active 5 | endlag 13 → total 26f
-    ftilt: {
-      id:'ftilt', aerial:false,
-      startup:8, active:5, endlag:13, landLag:0,
-      damage:10, angle:28, baseKb:170, kbGrowth:9,
-      hitbox:{ ox:18, oy:0, w:54, h:30 }, hurtboxMod:null,
-      sfxColor:'#88ccff', locksMovement:false,
-    },
-
-    // Up Tilt — upward arc sweep. Anti-air, juggle tool.
-    // startup 7 | active 6 | endlag 11 → total 24f
-    utilt: {
-      id:'utilt', aerial:false,
-      startup:7, active:6, endlag:11, landLag:0,
-      damage:9, angle:86, baseKb:160, kbGrowth:8,
-      hitbox:{ ox:-2, oy:-38, w:48, h:42 }, hurtboxMod:null,
-      sfxColor:'#aaddff', locksMovement:false,
-    },
-
-    // Down Tilt — low sweeping stab. Trips at low %, launches at high %.
-    // startup 6 | active 4 | endlag 12 → total 22f
-    dtilt: {
-      id:'dtilt', aerial:false,
-      startup:6, active:4, endlag:12, landLag:0,
-      damage:8, angle:18, baseKb:140, kbGrowth:7,
-      hitbox:{ ox:14, oy:26, w:48, h:22 },
-      hurtboxMod:{ ox:0, oy:14, w:36, h:38 },
-      sfxColor:'#66bbff', locksMovement:false,
     },
 
     // Forward Smash — lunging overhead cleave. Premier KO move.
@@ -978,37 +833,6 @@ const MOVESETS = {
       sfxColor:'#ff9900', locksMovement:false,
     },
 
-    // Forward Tilt — wide horizontal swing. Kills at 80%+.
-    // startup 14 | active 5 | endlag 20 → total 39f
-    ftilt: {
-      id:'ftilt', aerial:false,
-      startup:14, active:5, endlag:20, landLag:0,
-      damage:14, angle:28, baseKb:290, kbGrowth:11,
-      hitbox:{ ox:18, oy:-2, w:58, h:36 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:false,
-    },
-
-    // Up Tilt — overhead slam. Kills vertically at 90%+.
-    // startup 12 | active 6 | endlag 18 → total 36f
-    utilt: {
-      id:'utilt', aerial:false,
-      startup:12, active:6, endlag:18, landLag:0,
-      damage:13, angle:90, baseKb:270, kbGrowth:10,
-      hitbox:{ ox:-6, oy:-42, w:60, h:44 }, hurtboxMod:null,
-      sfxColor:'#ffaa00', locksMovement:true,
-    },
-
-    // Down Tilt — ground pound crouch. Low angle, good for edge kills.
-    // startup 10 | active 5 | endlag 15 → total 30f
-    dtilt: {
-      id:'dtilt', aerial:false,
-      startup:10, active:5, endlag:15, landLag:0,
-      damage:11, angle:12, baseKb:220, kbGrowth:9,
-      hitbox:{ ox:12, oy:28, w:52, h:24 },
-      hurtboxMod:{ ox:0, oy:18, w:48, h:34 },
-      sfxColor:'#cc6600', locksMovement:false,
-    },
-
     // Forward Smash — full-body lunge. Earliest KO tool in the game.
     // startup 22 | active 4 | endlag 28 → total 54f  (very punishable)
     fsmash: {
@@ -1182,37 +1006,6 @@ const MOVESETS = {
       sfxColor:'#aaff88', locksMovement:false,
     },
 
-    // Forward Tilt — extending arm zap. Long range, weak knockback.
-    // startup 6 | active 6 | endlag 10 → total 22f
-    ftilt: {
-      id:'ftilt', aerial:false,
-      startup:6, active:6, endlag:10, landLag:0,
-      damage:7, angle:20, baseKb:100, kbGrowth:6,
-      hitbox:{ ox:20, oy:4, w:56, h:20 }, hurtboxMod:null,
-      sfxColor:'#88ff44', locksMovement:false,
-    },
-
-    // Up Tilt — quick upward shot. Fast anti-air, links to aerials.
-    // startup 5 | active 5 | endlag 9 → total 19f
-    utilt: {
-      id:'utilt', aerial:false,
-      startup:5, active:5, endlag:9, landLag:0,
-      damage:6, angle:85, baseKb:100, kbGrowth:5,
-      hitbox:{ ox:-2, oy:-30, w:36, h:34 }, hurtboxMod:null,
-      sfxColor:'#ccff44', locksMovement:false,
-    },
-
-    // Down Tilt — low-profile shot. Hits very low, good approach counter.
-    // startup 4 | active 5 | endlag 8 → total 17f
-    dtilt: {
-      id:'dtilt', aerial:false,
-      startup:4, active:5, endlag:8, landLag:0,
-      damage:5, angle:10, baseKb:80, kbGrowth:4,
-      hitbox:{ ox:14, oy:26, w:48, h:16 },
-      hurtboxMod:{ ox:2, oy:18, w:28, h:28 },
-      sfxColor:'#88ffcc', locksMovement:false,
-    },
-
     // Forward Smash — charged energy blast. KO move, telegraphed.
     // startup 14 | active 8 | endlag 18 → total 40f
     fsmash: {
@@ -1369,26 +1162,6 @@ const MOVESETS = {
 };
 // ═══════════════════════════════════════════════════════════
 const FIGHTER_DEFS = {
-  BLAZE: {
-    color:'#00c8ff', shadowColor:'rgba(0,200,255,0.5)',
-    width:36, height:52,
-    groundSpeed:620, groundAccel:3800,
-    airSpeed:540,    airAccel:2200,
-    groundFrict:0.82, airFrict:0.995,
-    jumpVy:-780, dblJumpVy:-700, fastFallVy:900,
-    maxJumps:2,
-    moveset: MOVESETS.BLAZE,
-  },
-  FROST: {
-    color:'#ff6b35', shadowColor:'rgba(255,107,53,0.5)',
-    width:40, height:48,
-    groundSpeed:560, groundAccel:2800,
-    airSpeed:600,    airAccel:2800,
-    groundFrict:0.75, airFrict:0.997,
-    jumpVy:-820, dblJumpVy:-640, fastFallVy:1100,
-    maxJumps:2,
-    moveset: MOVESETS.FROST,
-  },
 
   // ── Balanced Swordfighter ─────────────────────────────────
   // Medium weight, medium speed. Strong disjoint range. 2 jumps.
@@ -1881,10 +1654,36 @@ class Fighter {
     // ── ATTACK INPUT ──────────────────────────
     if (!locked) {
       const air = !this.onGround;
-      if (keyJust(ctl.jab))     this.tryMove('jab');
-      if (keyJust(ctl.attack1)) this.tryMove(air ? 'fair'  : 'ftilt');
-      if (keyJust(ctl.attack2)) this.tryMove(air ? 'uair'  : 'utilt');
-      if (keyJust(ctl.attack3)) this.tryMove(air ? 'dair'  : 'dtilt');
+      const l   = keyHeld(ctl.left), r = keyHeld(ctl.right);
+      const u   = keyHeld(ctl.up),   d = keyHeld(ctl.down);
+
+      // NORMAL button — directional aerial in air, jab/fsmash on ground
+      if (keyJust(ctl.normal)) {
+        if (air) {
+          // Direction picks the aerial: up→uair, down→dair,
+          // back→bair, forward→fair, neutral→nair
+          if (u)                                    this.tryMove('uair');
+          else if (d)                               this.tryMove('dair');
+          else if ((l && this.facing === 1) ||
+                   (r && this.facing === -1))        this.tryMove('bair');
+          else if (l || r)                          this.tryMove('fair');
+          else                                      this.tryMove('nair');
+        } else {
+          // Hold left/right = smash, neutral = jab
+          this.tryMove((l || r) ? 'fsmash' : 'jab');
+        }
+      }
+
+      // SPECIAL button — direction selects which special
+      if (keyJust(ctl.special)) {
+        if (u)           this.tryMove('upSpecial');
+        else if (d)      this.tryMove('downSpecial');
+        else if (l || r) this.tryMove('sideSpecial');
+        else             this.tryMove('neutralSpecial');
+      }
+
+      // GRAB button
+      if (keyJust(ctl.grab)) this.tryMove('grab');
     }
 
     // ── HORIZONTAL MOVEMENT ───────────────────
@@ -2360,14 +2159,14 @@ const ledges = [
 //  FIGHTER INSTANCES
 // ═══════════════════════════════════════════════════════════
 const fighters = [
-  new Fighter('BLAZE', 260, 300, {
-    left:'KeyA', right:'KeyD', jump:'KeyW', down:'KeyS', up:'KeyW',
-    jab:'KeyJ', attack1:'KeyK', attack2:'KeyL', attack3:'Semicolon',
+  new Fighter('BLADE', 260, 300, {
+    left:'KeyA', right:'KeyD', up:'KeyW', down:'KeyS', jump:'KeyW',
+    normal:'KeyJ', special:'KeyK', grab:'KeyL',
     shield:'KeyF', dodge:'KeyG',
   }),
-  new Fighter('FROST', 620, 300, {
-    left:'ArrowLeft', right:'ArrowRight', jump:'ArrowUp', down:'ArrowDown', up:'ArrowUp',
-    jab:'Numpad1', attack1:'Numpad2', attack2:'Numpad3', attack3:'Numpad4',
+  new Fighter('GRUNT', 620, 300, {
+    left:'ArrowLeft', right:'ArrowRight', up:'ArrowUp', down:'ArrowDown', jump:'ArrowUp',
+    normal:'Numpad1', special:'Numpad2', grab:'Numpad3',
     shield:'Numpad5', dodge:'Numpad6',
   }),
 ];
