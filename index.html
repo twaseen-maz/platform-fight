@@ -721,7 +721,7 @@ const MOVESETS = {
       startup:18, active:30, endlag:20, landLag:0,
       damage:7, angle:10, baseKb:130, kbGrowth:6,
       hitbox:{ ox:30, oy:8, w:36, h:16 }, hurtboxMod:null,
-      sfxColor:'#44ffff', locksMovement:true, hitstunMult:0.60,
+      sfxColor:'#44ffff', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
     // Side Special — Dash Slash. Lunging attack with forward momentum.
@@ -731,7 +731,7 @@ const MOVESETS = {
       startup:10, active:6, endlag:16, landLag:12,
       damage:11, angle:30, baseKb:200, kbGrowth:9,
       hitbox:{ ox:22, oy:-4, w:52, h:36 }, hurtboxMod:null,
-      sfxColor:'#aaffee', locksMovement:false, hitstunMult:0.60,
+      sfxColor:'#aaffee', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
 
     // Up Special — Rising Blade. Recovery move, vertical launch.
@@ -751,7 +751,7 @@ const MOVESETS = {
       startup:4, active:20, endlag:22, landLag:0,
       damage:14, angle:60, baseKb:220, kbGrowth:10,
       hitbox:{ ox:0, oy:0, w:36, h:52 }, hurtboxMod:null,
-      sfxColor:'#ffaaff', locksMovement:true, hitstunMult:0.60,
+      sfxColor:'#ffaaff', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
     // ── GRAB + THROWS ────────────────────────────────────
@@ -885,7 +885,7 @@ const MOVESETS = {
       startup:24, active:6, endlag:30, landLag:0,
       damage:20, angle:80, baseKb:380, kbGrowth:12,
       hitbox:{ ox:-8, oy:20, w:64, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff4400', locksMovement:true, hitstunMult:0.60,
+      sfxColor:'#ff4400', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
     // Side Special — Bull Rush. Armoured horizontal charge.
@@ -895,7 +895,7 @@ const MOVESETS = {
       startup:14, active:12, endlag:20, landLag:16,
       damage:13, angle:20, baseKb:240, kbGrowth:9,
       hitbox:{ ox:20, oy:0, w:56, h:48 }, hurtboxMod:null,
-      sfxColor:'#ff8800', locksMovement:false, hitstunMult:0.60,
+      sfxColor:'#ff8800', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
 
     // Up Special — Rocket Jump. Damages below, poor recovery distance.
@@ -915,7 +915,7 @@ const MOVESETS = {
       startup:18, active:14, endlag:24, landLag:0,
       damage:15, angle:50, baseKb:260, kbGrowth:10,
       hitbox:{ ox:-30, oy:24, w:108, h:24 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.60,
+      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
     // ── GRAB + THROWS ────────────────────────────────────
@@ -1049,7 +1049,7 @@ const MOVESETS = {
       startup:12, active:40, endlag:14, landLag:0,
       damage:6, angle:10, baseKb:90, kbGrowth:5,
       hitbox:{ ox:28, oy:8, w:24, h:20 }, hurtboxMod:null,
-      sfxColor:'#44ff88', locksMovement:false, hitstunMult:0.60,
+      sfxColor:'#44ff88', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
 
     // Side Special — Dash Burst. Quick teleport-dash with trailing hitbox.
@@ -1059,7 +1059,7 @@ const MOVESETS = {
       startup:6, active:4, endlag:12, landLag:8,
       damage:7, angle:30, baseKb:110, kbGrowth:5,
       hitbox:{ ox:16, oy:2, w:44, h:28 }, hurtboxMod:null,
-      sfxColor:'#aaffcc', locksMovement:false, hitstunMult:0.60,
+      sfxColor:'#aaffcc', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
 
     // Up Special — Boost Jet. Fast vertical recovery, weak hitbox on ascent.
@@ -1079,7 +1079,7 @@ const MOVESETS = {
       startup:8, active:50, endlag:10, landLag:0,
       damage:9, angle:55, baseKb:120, kbGrowth:6,
       hitbox:{ ox:0, oy:28, w:28, h:20 }, hurtboxMod:null,
-      sfxColor:'#ffff44', locksMovement:false, hitstunMult:0.60,
+      sfxColor:'#ffff44', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
 
     // ── GRAB + THROWS ────────────────────────────────────
@@ -1335,8 +1335,13 @@ class Fighter {
     const move = this.def.moveset[moveName];
     if (!move) return;
     const inAir = !this.onGround;
-    if (move.aerial && !inAir)      return;
-    if (!move.aerial && inAir)      return;
+
+    // aerial:true   → air only (aerials)
+    // aerial:false + airOk:true → both air and ground (specials)
+    // aerial:false + no airOk  → ground only (jab, grab, throws)
+    if (move.aerial && !inAir)               return;  // aerial on ground: blocked
+    if (!move.aerial && !move.airOk && inAir) return;  // ground-only in air: blocked
+
     if (isAttackState(this.state))  return;
     if (this.state === State.HITSTUN || this.state === State.LANDLAG) return;
 
@@ -1629,22 +1634,30 @@ class Fighter {
       const u   = keyHeld(ctl.up),   d = keyHeld(ctl.down);
 
       // NORMAL button — directional aerial in air, jab on ground
+      // Down+Normal in air = dair (explicit spike input, separate from other aerials)
       if (keyJust(ctl.normal)) {
         if (air) {
-          // Direction picks the aerial: up→uair, down→dair,
-          // back→bair, forward→fair, neutral→nair
-          if (u)                                    this.tryMove('uair');
-          else if (d)                               this.tryMove('dair');
-          else if ((l && this.facing === 1) ||
-                   (r && this.facing === -1))        this.tryMove('bair');
-          else if (l || r)                          this.tryMove('fair');
-          else                                      this.tryMove('nair');
+          if (d) {
+            // Down + Normal → dair (spike)
+            this.tryMove('dair');
+          } else if (u) {
+            this.tryMove('uair');
+          } else if ((l && this.facing === 1) ||
+                     (r && this.facing === -1)) {
+            this.tryMove('bair');
+          } else if (l || r) {
+            this.tryMove('fair');
+          } else {
+            this.tryMove('nair');
+          }
         } else {
           this.tryMove('jab');
         }
       }
 
-      // SPECIAL button — direction selects which special
+      // SPECIAL button — direction selects which special.
+      // All specials work both on ground and in air (airOk:true on neutral/side/down).
+      // upSpecial is aerial:true so it only fires in air anyway.
       if (keyJust(ctl.special)) {
         if (u)           this.tryMove('upSpecial');
         else if (d)      this.tryMove('downSpecial');
@@ -1652,7 +1665,7 @@ class Fighter {
         else             this.tryMove('neutralSpecial');
       }
 
-      // GRAB button
+      // GRAB button — ground only (grab has no airOk)
       if (keyJust(ctl.grab)) this.tryMove('grab');
     }
 
