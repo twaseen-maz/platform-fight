@@ -3407,10 +3407,14 @@ class VictoryScene extends Scene {
     this._sel    = 0;
     this._pulse  = 0;
     document.getElementById('app').classList.add('menu-active');
+    uiCanvas.classList.add('ui-interactive');
+    uiCanvas.style.cursor = 'default';
   }
 
   exit() {
     document.getElementById('app').classList.remove('menu-active');
+    uiCanvas.classList.remove('ui-interactive');
+    uiCanvas.style.cursor = 'default';
   }
 
   update(dt) {
