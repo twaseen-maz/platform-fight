@@ -139,8 +139,12 @@
     position: fixed;
     top: 0; left: 0;
     width: 100%; height: 100%;
-    pointer-events: none;
+    pointer-events: none;   /* off by default — enabled by .ui-interactive class in menu scenes */
     z-index: 100;
+  }
+  #ui-canvas.ui-interactive {
+    pointer-events: auto;
+    cursor: default;
   }
 
   /* ── DOM HUD & debug bar always hidden — canvas HUD only ── */
@@ -1778,11 +1782,13 @@ class Fighter {
       this._trySnapLedge();
     }
 
-    if (this.x < 0)               { this.x = 0;                this.vx = Math.max(0, this.vx); }
-    if (this.right > stage.width)  { this.x = stage.width-this.w; this.vx = Math.min(0, this.vx); }
-
-    // Blast zone — set flag for GameScene to detect; also clean up state
-    if (this.y > stage.height + 200 || this.x < -300 || this.x > stage.width + 300) {
+    // No side walls — fighters can walk/fly off the edge freely.
+    // Blast zone — set flag for GameScene to detect; also clean up state.
+    // Uses BLAST constants (left/right/top/bottom) so the layout drives the zone.
+    if (this.x + this.w / 2 < BLAST.left  ||
+        this.x + this.w / 2 > BLAST.right ||
+        this.y + this.h / 2 > BLAST.bottom ||
+        this.y + this.h / 2 < BLAST.top) {
       if (!this._blasted) {
         this._blasted = true;
         this.vx = 0; this.vy = 0;
@@ -2115,51 +2121,49 @@ function resolveHitboxes(fighters) {
 //  STAGE
 // ═══════════════════════════════════════════════════════════
 const stage = { width: 960, height: 540 };
+
+// ── Final Destination-style layout ───────────────────────
+//   Main floor:  wide single platform elevated above the void
+//   Two floaters: symmetric left/right, slightly above center
+//   No side walls — characters walk off edges into the blast zone
+const FLOOR_X = 80, FLOOR_Y = 420, FLOOR_W = 800, FLOOR_H = 22;
+const PLAT_H  = 14;
+const PLAT_L  = { x: 220, y: 285, w: 190 };   // left floating platform
+const PLAT_R  = { x: 550, y: 285, w: 190 };   // right floating platform
+
 const platforms = [
-  new Platform(0, stage.height - 50, stage.width, 50, true),
-  new Platform(200, 370, 180, 18),
-  new Platform(590, 370, 180, 18),
-  new Platform(380, 250, 200, 18),
-  new Platform( 60, 280, 120, 18),
-  new Platform(780, 280, 120, 18),
+  new Platform(FLOOR_X, FLOOR_Y, FLOOR_W, FLOOR_H, true),
+  new Platform(PLAT_L.x, PLAT_L.y, PLAT_L.w, PLAT_H),
+  new Platform(PLAT_R.x, PLAT_R.y, PLAT_R.w, PLAT_H),
 ];
 
-// ── Ledge snap points ────────────────────────────────────
-// One pair per edge platform (left ledge and right ledge).
-// Each Ledge(x, y, facing): x/y = the exact corner pixel,
-// facing = +1 (right side of platform) or -1 (left side).
-// The main ground floor has no ledges — fighters just blast off.
+// ── Blast zone boundaries ─────────────────────────────────
+// Characters outside these bounds lose a stock.
+// Generous horizontal/vertical margins allow recovery attempts.
+const BLAST = { left: -280, right: 1240, top: -200, bottom: 760 };
+
+// ── Ledge snap points ─────────────────────────────────────
+// Main floor: left and right edges
+// Each floating platform: left and right edges
 const ledges = [
-  // Main left wall edge — fighters approach from left of stage
-  new Ledge(0,             stage.height - 50, -1),
-  new Ledge(stage.width,   stage.height - 50, +1),
-  // Left floating platform (x=200, w=180, y=370)
-  new Ledge(200,           370, -1),
-  new Ledge(200 + 180,     370, +1),
-  // Right floating platform (x=590, w=180, y=370)
-  new Ledge(590,           370, -1),
-  new Ledge(590 + 180,     370, +1),
-  // Center top platform (x=380, w=200, y=250)
-  new Ledge(380,           250, -1),
-  new Ledge(380 + 200,     250, +1),
-  // Far-left platform (x=60, w=120, y=280)
-  new Ledge(60,            280, -1),
-  new Ledge(60 + 120,      280, +1),
-  // Far-right platform (x=780, w=120, y=280)
-  new Ledge(780,           280, -1),
-  new Ledge(780 + 120,     280, +1),
+  new Ledge(FLOOR_X,            FLOOR_Y, -1),
+  new Ledge(FLOOR_X + FLOOR_W,  FLOOR_Y, +1),
+  new Ledge(PLAT_L.x,           PLAT_L.y, -1),
+  new Ledge(PLAT_L.x + PLAT_L.w, PLAT_L.y, +1),
+  new Ledge(PLAT_R.x,           PLAT_R.y, -1),
+  new Ledge(PLAT_R.x + PLAT_R.w, PLAT_R.y, +1),
 ];
 
 // ═══════════════════════════════════════════════════════════
 //  FIGHTER INSTANCES
 // ═══════════════════════════════════════════════════════════
 const fighters = [
-  new Fighter('BLADE', 260, 300, {
+  new Fighter('BLADE', 310, 300, {
     left:'KeyA', right:'KeyD', up:'KeyW', down:'KeyS', jump:'KeyW',
     normal:'KeyJ', special:'KeyK', grab:'KeyL',
     shield:'KeyF', dodge:'KeyG',
   }),
-  new Fighter('GRUNT', 620, 300, {
+  new Fighter('GRUNT', 650, 300, {
     left:'ArrowLeft', right:'ArrowRight', up:'ArrowUp', down:'ArrowDown', jump:'ArrowUp',
     normal:'Numpad1', special:'Numpad2', grab:'Numpad3',
     shield:'Numpad5', dodge:'Numpad6',
@@ -2177,31 +2181,123 @@ document.getElementById('canvas-wrap').style.width  = stage.width  + 'px';
 document.getElementById('canvas-wrap').style.height = stage.height + 'px';
 
 function drawBackground() {
-  ctx.fillStyle = '#080810'; ctx.fillRect(0, 0, stage.width, stage.height);
-  ctx.strokeStyle = 'rgba(30,30,60,0.6)'; ctx.lineWidth = 1;
-  for (let x=0; x<=stage.width;  x+=60) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,stage.height); ctx.stroke(); }
-  for (let y=0; y<=stage.height; y+=60) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(stage.width,y); ctx.stroke(); }
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-  ctx.beginPath(); ctx.moveTo(stage.width/2,0); ctx.lineTo(stage.width/2,stage.height); ctx.stroke();
+  // Deep space void — FD aesthetic
+  const bg = ctx.createLinearGradient(0, 0, 0, stage.height);
+  bg.addColorStop(0,   '#04040f');
+  bg.addColorStop(0.5, '#070718');
+  bg.addColorStop(1,   '#020208');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, stage.width, stage.height);
+
+  // Subtle star field
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  // Deterministic stars using a fixed seed pattern
+  const stars = [
+    [48,30],[120,88],[210,22],[310,65],[400,40],[510,18],[620,72],[730,30],[850,55],[920,20],
+    [70,150],[180,130],[290,170],[430,120],[540,160],[660,140],[780,115],[900,145],
+    [35,230],[150,200],[270,250],[390,215],[500,240],[640,195],[760,220],[880,245],
+    [95,310],[220,340],[370,300],[490,330],[580,305],[700,355],[820,315],[940,340],
+    [55,400],[165,380],[850,390],[940,410],[30,460],[180,450],[820,455],[930,480],
+  ];
+  for (const [sx, sy] of stars) {
+    const r = ((sx * 7 + sy * 13) % 3 === 0) ? 1.5 : 0.8;
+    ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  // Faint horizon glow behind the main platform
+  ctx.save();
+  const glow = ctx.createRadialGradient(stage.width/2, FLOOR_Y + 20, 10, stage.width/2, FLOOR_Y + 20, 500);
+  glow.addColorStop(0,   'rgba(0,180,255,0.07)');
+  glow.addColorStop(0.4, 'rgba(0,100,200,0.04)');
+  glow.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, stage.width, stage.height);
+  ctx.restore();
 }
 
 function drawPlatforms() {
   for (const p of platforms) {
-    ctx.shadowColor = p.isGround ? 'rgba(0,255,200,0.15)' : 'rgba(0,200,255,0.3)';
-    ctx.shadowBlur  = p.isGround ? 8 : 14;
+    ctx.save();
     if (p.isGround) {
-      const g = ctx.createLinearGradient(0,p.y,0,p.y+p.h);
-      g.addColorStop(0,'#1a3a3a'); g.addColorStop(1,'#0a1a1a');
-      ctx.fillStyle=g; ctx.fillRect(p.x,p.y,p.w,p.h);
-      ctx.shadowBlur=0; ctx.strokeStyle='#00ffc8'; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.moveTo(p.x,p.y+1); ctx.lineTo(p.x+p.w,p.y+1); ctx.stroke();
+      // ── Main floor — FD-style sleek slab ───────────────
+      const radius = 10;
+
+      // Underside fade (void shadow beneath the floor)
+      const underGlow = ctx.createLinearGradient(0, p.y, 0, p.y + p.h + 60);
+      underGlow.addColorStop(0,   'rgba(0,160,255,0.12)');
+      underGlow.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = underGlow;
+      ctx.fillRect(p.x - 20, p.y, p.w + 40, 80);
+
+      // Main body — rounded rect fill
+      const bodyGrad = ctx.createLinearGradient(0, p.y, 0, p.y + p.h);
+      bodyGrad.addColorStop(0, '#1a3050');
+      bodyGrad.addColorStop(1, '#0a1828');
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.roundRect(p.x, p.y, p.w, p.h, radius);
+      ctx.fill();
+
+      // Top surface glow line — the iconic FD edge strip
+      ctx.shadowColor = '#00c8ff';
+      ctx.shadowBlur  = 12;
+      ctx.strokeStyle = '#00c8ff';
+      ctx.lineWidth   = 2;
+      ctx.beginPath();
+      ctx.moveTo(p.x + radius, p.y + 1);
+      ctx.lineTo(p.x + p.w - radius, p.y + 1);
+      ctx.stroke();
+
+      // Left and right curved end caps (brighter)
+      ctx.shadowBlur  = 8;
+      ctx.strokeStyle = 'rgba(0,200,255,0.5)';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.arc(p.x + radius, p.y + radius, radius, Math.PI, 1.5 * Math.PI);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(p.x + p.w - radius, p.y + radius, radius, 1.5 * Math.PI, 2 * Math.PI);
+      ctx.stroke();
+
+      // Subtle centre line marker
+      ctx.shadowBlur  = 0;
+      ctx.strokeStyle = 'rgba(0,180,255,0.15)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(p.x + p.w / 2, p.y + 4);
+      ctx.lineTo(p.x + p.w / 2, p.y + p.h - 2);
+      ctx.stroke();
+
     } else {
-      ctx.fillStyle='#1a2040'; ctx.fillRect(p.x,p.y,p.w,p.h);
-      ctx.shadowBlur=0; ctx.strokeStyle='#3060ff'; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(p.x+p.w,p.y); ctx.stroke();
-      ctx.fillStyle='#3060ff'; ctx.fillRect(p.x,p.y,4,p.h); ctx.fillRect(p.x+p.w-4,p.y,4,p.h);
+      // ── Floating platforms — thin translucent pads ──────
+      const bodyGrad = ctx.createLinearGradient(0, p.y, 0, p.y + p.h);
+      bodyGrad.addColorStop(0, 'rgba(40,80,160,0.7)');
+      bodyGrad.addColorStop(1, 'rgba(20,40,100,0.5)');
+      ctx.fillStyle = bodyGrad;
+      ctx.beginPath();
+      ctx.roundRect(p.x, p.y, p.w, p.h, 5);
+      ctx.fill();
+
+      // Top edge glow
+      ctx.shadowColor = 'rgba(80,140,255,0.9)';
+      ctx.shadowBlur  = 10;
+      ctx.strokeStyle = '#4080ff';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.x + 5, p.y + 1);
+      ctx.lineTo(p.x + p.w - 5, p.y + 1);
+      ctx.stroke();
+
+      // Left/right edge end caps
+      ctx.shadowBlur  = 5;
+      ctx.fillStyle   = 'rgba(80,140,255,0.8)';
+      ctx.fillRect(p.x, p.y, 3, p.h);
+      ctx.fillRect(p.x + p.w - 3, p.y, 3, p.h);
     }
-    ctx.shadowBlur=0;
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 }
 
@@ -2527,6 +2623,10 @@ class Scene {
 
   // Called on keydown. e = KeyboardEvent
   onKey(e) {}
+
+  // Called on mouse events routed from uiCanvas.
+  // type = 'move' | 'click'    x/y = UI canvas coords
+  onMouse(type, x, y) {}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2608,7 +2708,8 @@ class SceneManager {
     }
   }
 
-  onKey(e) { this._scene?.onKey(e); }
+  onKey(e)            { this._scene?.onKey(e); }
+  onMouse(type, x, y) { this._scene?.onMouse(type, x, y); }
 }
 
 const SM = new SceneManager();
@@ -2627,6 +2728,8 @@ class MainMenuScene extends Scene {
   enter() {
     super.enter();
     document.getElementById('app').classList.add('menu-active');
+    uiCanvas.classList.add('ui-interactive');
+    uiCanvas.style.cursor = 'default';
     // Black out game canvas so it doesn't show through
     ctx.fillStyle = '#080810';
     ctx.fillRect(0, 0, stage.width, stage.height);
@@ -2634,6 +2737,8 @@ class MainMenuScene extends Scene {
 
   exit() {
     document.getElementById('app').classList.remove('menu-active');
+    uiCanvas.classList.remove('ui-interactive');
+    uiCanvas.style.cursor = 'default';
   }
 
   update(dt) {
@@ -2661,17 +2766,22 @@ class MainMenuScene extends Scene {
     // ── Menu options ──────────────────────────
     const optY    = H * 0.56;
     const spacing = 58;
+    const barW    = 340;
+
+    // Rebuild hit rects each frame so they always match actual render geometry
+    this._hitRects = [];
 
     this._options.forEach((opt, i) => {
       const y      = optY + i * spacing;
       const active = i === this._sel;
+      const rx = CX - barW/2, ry = y - 22, rh = 44;
+
+      // Store hit rect for mouse handling
+      this._hitRects.push({ x: rx, y: ry, w: barW, h: rh, idx: i });
 
       if (active) {
-        // Selection background
-        const barW = 340;
-        uiFillRect(CX - barW/2, y - 22, barW, 44, '#00ffc8', 0.10);
-        uiRect(CX - barW/2, y - 22, barW, 44, '#00ffc8', 1.5, 0.6);
-        // Selector arrow
+        uiFillRect(rx, ry, barW, rh, '#00ffc8', 0.10);
+        uiRect(rx, ry, barW, rh, '#00ffc8', 1.5, 0.6);
         const arrowPulse = 0.7 + 0.3 * Math.sin(this._pulse);
         uiText('▶', CX - 190, y, { size: 16, color: '#00ffc8', alpha: arrowPulse });
         uiText(opt, CX, y, { size: 22, color: '#ffffff', glow: '#00ffc8' });
@@ -2682,9 +2792,30 @@ class MainMenuScene extends Scene {
     });
 
     // ── Footer ────────────────────────────────
-    uiMonoText('↑↓ NAVIGATE  •  ENTER SELECT', CX, H - 40, { size: 11, color: '#2a3040' });
+    uiMonoText('↑↓ / MOUSE  NAVIGATE  •  ENTER / CLICK  SELECT', CX, H - 40, { size: 11, color: '#2a3040' });
 
     uiScanlines();
+  }
+
+  onMouse(type, x, y) {
+    if (!this._hitRects) return;
+    for (const r of this._hitRects) {
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        if (type === 'move') {
+          this._sel = r.idx;
+          uiCanvas.style.cursor = 'pointer';
+          return;
+        }
+        if (type === 'click') {
+          this._sel = r.idx;
+          if (r.idx === 0) { MatchConfig.mode = 'vs';       SM.goto('CharSelect'); }
+          if (r.idx === 1) { MatchConfig.mode = 'training'; SM.goto('CharSelect'); }
+          if (r.idx === 2) { /* OPTIONS — placeholder */ }
+          return;
+        }
+      }
+    }
+    uiCanvas.style.cursor = 'default';
   }
 
   onKey(e) {
@@ -2720,10 +2851,14 @@ class CharacterSelectScene extends Scene {
     this._phase        = 'p1';
     this._confirmPulse = 0;
     document.getElementById('app').classList.add('menu-active');
+    uiCanvas.classList.add('ui-interactive');
+    uiCanvas.style.cursor = 'default';
   }
 
   exit() {
     document.getElementById('app').classList.remove('menu-active');
+    uiCanvas.classList.remove('ui-interactive');
+    uiCanvas.style.cursor = 'default';
   }
 
   update(dt) {
@@ -2840,14 +2975,74 @@ class CharacterSelectScene extends Scene {
 
     // ── Controls hint ─────────────────────────
     const hints = {
-      p1:      '← → CHOOSE  •  ENTER CONFIRM',
-      p2:      '← → CHOOSE  •  ENTER CONFIRM  •  ESC BACK',
-      confirm: 'ENTER START MATCH  •  ESC BACK',
+      p1:      '← → / CLICK CARD  CHOOSE  •  ENTER / CLICK AGAIN  CONFIRM',
+      p2:      '← → / CLICK CARD  CHOOSE  •  ENTER / CLICK AGAIN  CONFIRM  •  ESC BACK',
+      confirm: 'CLICK START or ENTER  •  ESC BACK',
     };
     const confirmPulse = this._phase === 'confirm' ? 0.6 + 0.4 * Math.sin(this._confirmPulse) : 1;
     uiMonoText(hints[this._phase], CX, H - 40, { size: 12, color: '#2a3040', alpha: confirmPulse });
 
+    // ── Confirm button (confirm phase) ────────
+    this._hitRects = [];
+    if (this._phase === 'confirm') {
+      const btnW = 260, btnH = 46;
+      const btnX = CX - btnW / 2, btnY = H - 34 - btnH;
+      const bp = 0.6 + 0.4 * Math.sin(this._confirmPulse);
+      uiFillRect(btnX, btnY, btnW, btnH, '#00ffc8', 0.15 * bp);
+      uiRect(btnX, btnY, btnW, btnH, '#00ffc8', 2, 0.8 * bp);
+      uiText('▶  START MATCH', CX, btnY + btnH / 2, { size: 16, color: '#ffffff', glow: '#00ffc8' });
+      this._hitRects.push({ x: btnX, y: btnY, w: btnW, h: btnH, action: 'start' });
+    }
+
+    // Record card hit rects for mouse picking
+    ROSTER.forEach((_, i) => {
+      const x = startX + i * (cardW + gap);
+      this._hitRects.push({ x, y: cardY, w: cardW, h: cardH, action: 'card', idx: i });
+    });
+
     uiScanlines();
+  }
+
+  onMouse(type, x, y) {
+    if (!this._hitRects) return;
+    let overBtn = false;
+    for (const r of this._hitRects) {
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        overBtn = true;
+        if (type === 'move') {
+          uiCanvas.style.cursor = 'pointer';
+        }
+        if (type === 'click') {
+          if (r.action === 'start') {
+            MatchConfig.p1RosterIdx = this._p1Sel;
+            MatchConfig.p2RosterIdx = this._p2Sel;
+            MatchConfig.p2IsCPU     = this._p2CPU;
+            SM.goto('Game');
+          } else if (r.action === 'card') {
+            if (this._phase === 'p1') {
+              if (this._p1Sel === r.idx) {
+                // Already selected — clicking again confirms
+                this._phase = 'p2';
+              } else {
+                this._p1Sel = r.idx;
+              }
+            } else if (this._phase === 'p2') {
+              if (this._p2Sel === r.idx) {
+                this._phase = 'confirm';
+              } else {
+                this._p2Sel = r.idx;
+              }
+            } else if (this._phase === 'confirm') {
+              // Clicking a card in confirm goes back to editing P2
+              this._phase = 'p2';
+              this._p2Sel = r.idx;
+            }
+          }
+        }
+        return;
+      }
+    }
+    if (!overBtn) uiCanvas.style.cursor = 'default';
   }
 
   onKey(e) {
@@ -2898,8 +3093,8 @@ class GameScene extends Scene {
     const p2Def = ROSTER[MatchConfig.p2RosterIdx].defName;
 
     // Reinitialise fighters with selected characters
-    fighters[0] = new Fighter(p1Def, 260, 300, fighters[0].controls);
-    fighters[1] = new Fighter(p2Def, 620, 300, fighters[1].controls);
+    fighters[0] = new Fighter(p1Def, 310, 300, fighters[0].controls);
+    fighters[1] = new Fighter(p2Def, 650, 300, fighters[1].controls);
 
     // Stock reset
     this._stocks     = [MatchConfig.stocks, MatchConfig.stocks];
@@ -2918,7 +3113,7 @@ class GameScene extends Scene {
   _resetFighter(idx) {
     const defName = ROSTER[idx === 0 ? MatchConfig.p1RosterIdx : MatchConfig.p2RosterIdx].defName;
     const ctl     = fighters[idx].controls;
-    fighters[idx] = new Fighter(defName, idx === 0 ? 260 : 620, 80, ctl);
+    fighters[idx] = new Fighter(defName, idx === 0 ? 350 : 610, 160, ctl);
   }
 
   update(dt) {
@@ -3096,6 +3291,13 @@ class PauseScene extends Scene {
     super.enter();
     this._sel   = 0;
     this._pulse = 0;
+    uiCanvas.classList.add('ui-interactive');
+    uiCanvas.style.cursor = 'default';
+  }
+
+  exit() {
+    uiCanvas.classList.remove('ui-interactive');
+    uiCanvas.style.cursor = 'default';
   }
 
   update(dt) {
@@ -3127,11 +3329,15 @@ class PauseScene extends Scene {
     // Options
     const optY    = py + 126;
     const spacing = 54;
+    this._hitRects = [];
     this._options.forEach((opt, i) => {
       const y      = optY + i * spacing;
       const active = i === this._sel;
+      const rx = px + 20, rw = pW - 40, rh = 36;
+      const ry = y - 18;
+      this._hitRects.push({ x: rx, y: ry, w: rw, h: rh, idx: i });
       if (active) {
-        uiFillRect(px + 20, y - 18, pW - 40, 36, '#00ffc8', 0.09);
+        uiFillRect(rx, ry, rw, rh, '#00ffc8', 0.09);
         const arrowAlpha = 0.6 + 0.4 * Math.sin(this._pulse);
         uiText('▶', CX - 150, y, { size: 14, color: '#00ffc8', alpha: arrowAlpha });
         uiText(opt, CX, y, { size: 18, color: '#ffffff', glow: '#00ffc8' });
@@ -3140,8 +3346,28 @@ class PauseScene extends Scene {
       }
     });
 
-    uiMonoText('↑↓ NAVIGATE  •  ENTER SELECT  •  ESC RESUME', CX, py + pH - 24,
+    uiMonoText('↑↓ / MOUSE  NAVIGATE  •  ENTER / CLICK  SELECT  •  ESC RESUME', CX, py + pH - 24,
       { size: 10, color: '#2a3040' });
+  }
+
+  onMouse(type, x, y) {
+    if (!this._hitRects) return;
+    let over = false;
+    for (const r of this._hitRects) {
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        over = true;
+        if (type === 'move') { this._sel = r.idx; uiCanvas.style.cursor = 'pointer'; }
+        if (type === 'click') {
+          this._sel = r.idx;
+          if (r.idx === 0) { SM.resume('Game');     }
+          if (r.idx === 1) { SM.goto('Game');       }
+          if (r.idx === 2) { SM.goto('CharSelect'); }
+          if (r.idx === 3) { SM.goto('MainMenu');   }
+        }
+        return;
+      }
+    }
+    if (!over) uiCanvas.style.cursor = 'default';
   }
 
   onKey(e) {
@@ -3254,13 +3480,16 @@ class VictoryScene extends Scene {
     // ── Options ───────────────────────────────
     const optY    = H * 0.75;
     const spacing = 52;
+    const barW    = 340;
+    this._hitRects = [];
     this._options.forEach((opt, i) => {
       const y      = optY + i * spacing;
       const active = i === this._sel;
+      const rx = CX - barW/2, ry = y - 18, rh = 36;
+      this._hitRects.push({ x: rx, y: ry, w: barW, h: rh, idx: i });
       if (active) {
-        const barW = 340;
-        uiFillRect(CX - barW/2, y - 18, barW, 36, '#00ffc8', 0.09);
-        uiRect(CX - barW/2, y - 18, barW, 36, '#00ffc8', 1.5, 0.5);
+        uiFillRect(rx, ry, barW, rh, '#00ffc8', 0.09);
+        uiRect(rx, ry, barW, rh, '#00ffc8', 1.5, 0.5);
         const ap = 0.6 + 0.4 * Math.sin(this._pulse);
         uiText('▶', CX - 165, y, { size: 14, color: '#00ffc8', alpha: ap });
         uiText(opt, CX, y, { size: 19, color: '#ffffff', glow: '#00ffc8' });
@@ -3269,8 +3498,27 @@ class VictoryScene extends Scene {
       }
     });
 
-    uiMonoText('↑↓ NAVIGATE  •  ENTER SELECT', CX, H - 34, { size: 11, color: '#2a3040' });
+    uiMonoText('↑↓ / MOUSE  NAVIGATE  •  ENTER / CLICK  SELECT', CX, H - 34, { size: 11, color: '#2a3040' });
     uiScanlines();
+  }
+
+  onMouse(type, x, y) {
+    if (!this._hitRects) return;
+    let over = false;
+    for (const r of this._hitRects) {
+      if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
+        over = true;
+        if (type === 'move') { this._sel = r.idx; uiCanvas.style.cursor = 'pointer'; }
+        if (type === 'click') {
+          this._sel = r.idx;
+          if (r.idx === 0) SM.goto('Game');
+          if (r.idx === 1) SM.goto('CharSelect');
+          if (r.idx === 2) SM.goto('MainMenu');
+        }
+        return;
+      }
+    }
+    if (!over) uiCanvas.style.cursor = 'default';
   }
 
   onKey(e) {
@@ -3299,6 +3547,18 @@ SM.init([
 window.addEventListener('keydown', e => {
   if (e.code === 'Tab') return;  // Tab is debug-mode, handled separately
   SM.onKey(e);
+});
+
+// Route mouse events through the active scene.
+// We use uiCanvas (the full-screen overlay) as the hit surface.
+// Coordinates are in UI canvas space (same space scenes render into).
+uiCanvas.addEventListener('mousemove', e => {
+  const r = uiCanvas.getBoundingClientRect();
+  SM.onMouse('move', e.clientX - r.left, e.clientY - r.top);
+});
+uiCanvas.addEventListener('click', e => {
+  const r = uiCanvas.getBoundingClientRect();
+  SM.onMouse('click', e.clientX - r.left, e.clientY - r.top);
 });
 
 // Boot into Main Menu
