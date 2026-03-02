@@ -336,7 +336,7 @@ const AIRDODGE_ENDLAG     = 14;    // frames of non-invincible post-dodge lag
 
 // ── Ledge constants ───────────────────────────────────────
 const LEDGE_INVULN_FRAMES = 30;    // invincible frames immediately after snapping
-const LEDGE_SNAP_DIST     = 48;    // px — how close to a ledge corner to snap
+const LEDGE_SNAP_DIST     = 60;    // px — how close hand must be to snap (generous for recovery)
 const LEDGE_HANG_LIMIT    = 300;   // frames before auto-release (prevents camping)
 const LEDGE_GETUP_FRAMES  = 18;    // landing-lag equivalent after climbing up
 
@@ -1777,8 +1777,9 @@ class Fighter {
     }
 
     // ── Ledge snap ───────────────────────────
-    // Only attempt while airborne, falling or hitstun, not already on a ledge
-    if (!this.onGround && this.state !== State.LEDGE && this.vy >= -100) {
+    // Attempt any time the fighter is airborne and not already hanging.
+    // Direction and distance checks are handled inside _trySnapLedge().
+    if (!this.onGround && this.state !== State.LEDGE) {
       this._trySnapLedge();
     }
 
@@ -1800,47 +1801,46 @@ class Fighter {
   }
 
   // ── LEDGE SNAP ───────────────────────────
-  // Checks all ledge points. If this fighter's hand (top-corner) is within
-  // LEDGE_SNAP_DIST of a free ledge AND moving toward/past it, snap on.
+  // Attempts to grab any free ledge. A snap happens when:
+  //   1. The relevant hand corner is within LEDGE_SNAP_DIST of the ledge point
+  //   2. The fighter is not moving strongly AWAY from the ledge (vx check)
+  // No upward-velocity gate — recoveries using up-specials or jump must be able to grab.
   _trySnapLedge() {
     for (const ledge of ledges) {
       if (!ledge.isFree()) continue;
 
-      // The fighter must be moving toward the ledge from outside the stage
-      // ledge.facing = +1 means it's the RIGHT edge of a platform →
-      //   fighter must be to the RIGHT of the ledge (x > ledge.x) moving left (vx < 0), or falling
-      // ledge.facing = -1 means LEFT edge →
-      //   fighter must be to the LEFT (right < ledge.x) moving right (vx > 0), or falling
-
-      const onCorrectSide = ledge.facing === 1
-        ? this.cx > ledge.x     // right ledge: fighter is to the right
-        : this.cx < ledge.x;    // left ledge: fighter is to the left
-
-      if (!onCorrectSide) continue;
-
-      // Distance from fighter's top-corner to the ledge point
+      // Hand position: the corner that reaches toward the ledge
+      //   right ledge (facing +1): fighter approaches from outside-right → left hand
+      //   left ledge  (facing -1): fighter approaches from outside-left  → right hand
       const handX = ledge.facing === 1 ? this.left  : this.right;
       const handY = this.top;
-      const dist  = Math.hypot(handX - ledge.x, handY - ledge.y);
 
-      if (dist <= LEDGE_SNAP_DIST) {
-        // Snap!
-        // Position fighter hanging below the ledge
-        this.x  = ledge.facing === 1 ? ledge.x : ledge.x - this.w;
-        this.y  = ledge.y;           // top of fighter aligns with ledge y
-        this.vx = 0; this.vy = 0;
-        this.facing      = -ledge.facing; // face inward
-        this.onGround    = false;
-        this.ledgeTimer  = 0;
-        this.ledgeInvuln = LEDGE_INVULN_FRAMES;
-        this.invuln      = LEDGE_INVULN_FRAMES;
-        this.currentMove = null; this.activeHitbox = null;
-        this.jumpsLeft   = this.def.maxJumps; // restore jumps on ledge
-        this.airdodgeUsed= false;
-        ledge.occupy(this);
-        this.setState(State.LEDGE);
-        return;
-      }
+      const dist = Math.hypot(handX - ledge.x, handY - ledge.y);
+      if (dist > LEDGE_SNAP_DIST) continue;
+
+      // Reject if fighter is moving strongly AWAY from the ledge horizontally.
+      // "Away" = vx pushing them further from the platform interior.
+      //   right ledge: moving right (vx > threshold) = moving away
+      //   left ledge:  moving left  (vx < -threshold) = moving away
+      const AWAY_THRESHOLD = 200; // px/s — allow slow drift but block clear departures
+      if (ledge.facing === 1 && this.vx >  AWAY_THRESHOLD) continue;
+      if (ledge.facing === -1 && this.vx < -AWAY_THRESHOLD) continue;
+
+      // Snap! Position fighter hanging just below the ledge corner.
+      this.x  = ledge.facing === 1 ? ledge.x : ledge.x - this.w;
+      this.y  = ledge.y;           // top of fighter aligns with ledge y
+      this.vx = 0; this.vy = 0;
+      this.facing      = -ledge.facing; // face inward onto the stage
+      this.onGround    = false;
+      this.ledgeTimer  = 0;
+      this.ledgeInvuln = LEDGE_INVULN_FRAMES;
+      this.invuln      = LEDGE_INVULN_FRAMES;
+      this.currentMove = null; this.activeHitbox = null;
+      this.jumpsLeft   = this.def.maxJumps; // restore jumps on ledge grab
+      this.airdodgeUsed= false;
+      ledge.occupy(this);
+      this.setState(State.LEDGE);
+      return;
     }
   }
 
