@@ -487,8 +487,12 @@ function computeKnockback(moveDef, targetPercent, attackerFacing) {
   const vx  =  Math.cos(rad) * scaledKb * attackerFacing;
   const vy  = -Math.abs(Math.sin(rad) * scaledKb);  // always launches upward for sin>0
 
-  // Step 4 — hitstun frames scale with final KB magnitude
-  const hitstunFrames = Math.floor(scaledKb * HITSTUN_SCALE);
+  // Step 4 — hitstun: per-move multiplier overrides global scale
+  //   normals  → hitstunMult ~0.30 (low, combo-friendly but not lockout)
+  //   specials → hitstunMult ~0.60 (high, punishing)
+  //   throws   → hitstunMult ~0.40 (medium)
+  const mult         = moveDef.hitstunMult ?? HITSTUN_SCALE;
+  const hitstunFrames = Math.floor(scaledKb * mult);
 
   // Step 5 — hit pause from RAW kb (keep it data-driven, not damage-dependent)
   let hitPauseFrames = 0;
@@ -653,17 +657,7 @@ const MOVESETS = {
       startup:4, active:3, endlag:9, landLag:0,
       damage:5, angle:35, baseKb:100, kbGrowth:5,
       hitbox:{ ox:16, oy:2, w:44, h:20 }, hurtboxMod:null,
-      sfxColor:'#c8e0ff', locksMovement:false,
-    },
-
-    // Forward Smash — lunging overhead cleave. Premier KO move.
-    // startup 16 | active 4 | endlag 22 → total 42f  (slow, punishable)
-    fsmash: {
-      id:'fsmash', aerial:false,
-      startup:16, active:4, endlag:22, landLag:0,
-      damage:17, angle:32, baseKb:310, kbGrowth:13,
-      hitbox:{ ox:20, oy:-8, w:60, h:44 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true,
+      sfxColor:'#c8e0ff', locksMovement:false, hitstunMult:0.30,
     },
 
     // ── AERIALS ──────────────────────────────────────────
@@ -675,7 +669,7 @@ const MOVESETS = {
       startup:6, active:10, endlag:12, landLag:8,
       damage:8, angle:45, baseKb:150, kbGrowth:8,
       hitbox:{ ox:0, oy:0, w:52, h:52 }, hurtboxMod:null,
-      sfxColor:'#c8e0ff', locksMovement:false,
+      sfxColor:'#c8e0ff', locksMovement:false, hitstunMult:0.30,
     },
 
     // Forward Air — horizontal swipe. Strong edgeguard tool, low endlag.
@@ -685,7 +679,7 @@ const MOVESETS = {
       startup:9, active:5, endlag:14, landLag:10,
       damage:12, angle:22, baseKb:210, kbGrowth:10,
       hitbox:{ ox:18, oy:4, w:50, h:28 }, hurtboxMod:null,
-      sfxColor:'#88ccff', locksMovement:false,
+      sfxColor:'#88ccff', locksMovement:false, hitstunMult:0.30,
     },
 
     // Back Air — quick reverse slash. Fast, strong, KO potential near ledge.
@@ -695,7 +689,7 @@ const MOVESETS = {
       startup:7, active:4, endlag:13, landLag:9,
       damage:13, angle:155, baseKb:230, kbGrowth:11,
       hitbox:{ ox:-20, oy:2, w:48, h:26 }, hurtboxMod:null,
-      sfxColor:'#aaddff', locksMovement:false,
+      sfxColor:'#aaddff', locksMovement:false, hitstunMult:0.30,
     },
 
     // Up Air — upward thrust. Juggle and ceiling KO tool.
@@ -705,7 +699,7 @@ const MOVESETS = {
       startup:8, active:6, endlag:12, landLag:8,
       damage:11, angle:84, baseKb:190, kbGrowth:10,
       hitbox:{ ox:-4, oy:-42, w:46, h:44 }, hurtboxMod:null,
-      sfxColor:'#66ddff', locksMovement:false,
+      sfxColor:'#66ddff', locksMovement:false, hitstunMult:0.30,
     },
 
     // Down Air — SPIKE. Downward plunge, stalls then plunges. High risk/reward.
@@ -715,12 +709,10 @@ const MOVESETS = {
       startup:14, active:6, endlag:18, landLag:22,
       damage:14, angle:270, baseKb:280, kbGrowth:9,
       hitbox:{ ox:-4, oy:36, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff4488', locksMovement:true,
+      sfxColor:'#ff4488', locksMovement:true, hitstunMult:0.30,
     },
 
     // ── SPECIALS ─────────────────────────────────────────
-    // Stored in moveset but require special dispatch logic (not auto-wired yet).
-    // Frame data is complete so they can be activated via future special input.
 
     // Neutral Special — Blade Beam. Projectile (placeholder hitbox as thrown blade).
     // startup 18 | active 30 | endlag 20
@@ -729,7 +721,7 @@ const MOVESETS = {
       startup:18, active:30, endlag:20, landLag:0,
       damage:7, angle:10, baseKb:130, kbGrowth:6,
       hitbox:{ ox:30, oy:8, w:36, h:16 }, hurtboxMod:null,
-      sfxColor:'#44ffff', locksMovement:true,
+      sfxColor:'#44ffff', locksMovement:true, hitstunMult:0.60,
     },
 
     // Side Special — Dash Slash. Lunging attack with forward momentum.
@@ -739,7 +731,7 @@ const MOVESETS = {
       startup:10, active:6, endlag:16, landLag:12,
       damage:11, angle:30, baseKb:200, kbGrowth:9,
       hitbox:{ ox:22, oy:-4, w:52, h:36 }, hurtboxMod:null,
-      sfxColor:'#aaffee', locksMovement:false,
+      sfxColor:'#aaffee', locksMovement:false, hitstunMult:0.60,
     },
 
     // Up Special — Rising Blade. Recovery move, vertical launch.
@@ -749,7 +741,7 @@ const MOVESETS = {
       startup:5, active:8, endlag:30, landLag:24,
       damage:9, angle:82, baseKb:180, kbGrowth:7,
       hitbox:{ ox:-2, oy:-44, w:40, h:48 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true,
+      sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.60,
     },
 
     // Down Special — Counter Stance. Placeholder active window = parry window.
@@ -759,12 +751,11 @@ const MOVESETS = {
       startup:4, active:20, endlag:22, landLag:0,
       damage:14, angle:60, baseKb:220, kbGrowth:10,
       hitbox:{ ox:0, oy:0, w:36, h:52 }, hurtboxMod:null,
-      sfxColor:'#ffaaff', locksMovement:true,
+      sfxColor:'#ffaaff', locksMovement:true, hitstunMult:0.60,
     },
 
     // ── GRAB + THROWS ────────────────────────────────────
     // Grabs have damage:0, baseKb:0 (engine skips KB for grab moves).
-    // Throws defined as separate moves triggered by engine grab state (future).
 
     // Grab — standing grab reach.
     // startup 7 | active 3 | endlag 14
@@ -773,7 +764,7 @@ const MOVESETS = {
       startup:7, active:3, endlag:14, landLag:0,
       damage:0, angle:0, baseKb:0, kbGrowth:0,
       hitbox:{ ox:14, oy:4, w:36, h:24 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true,
+      sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.40,
     },
 
     // Forward Throw — standard launch.
@@ -782,7 +773,7 @@ const MOVESETS = {
       startup:2, active:1, endlag:16, landLag:0,
       damage:9, angle:30, baseKb:190, kbGrowth:8,
       hitbox:{ ox:12, oy:4, w:36, h:28 }, hurtboxMod:null,
-      sfxColor:'#88ccff', locksMovement:true,
+      sfxColor:'#88ccff', locksMovement:true, hitstunMult:0.40,
     },
 
     // Back Throw — strong horizontal KO throw near ledge.
@@ -791,7 +782,7 @@ const MOVESETS = {
       startup:3, active:1, endlag:18, landLag:0,
       damage:11, angle:155, baseKb:230, kbGrowth:10,
       hitbox:{ ox:-12, oy:4, w:36, h:28 }, hurtboxMod:null,
-      sfxColor:'#aaddff', locksMovement:true,
+      sfxColor:'#aaddff', locksMovement:true, hitstunMult:0.40,
     },
 
     // Up Throw — juggle throw, sets up aerial combos.
@@ -800,7 +791,7 @@ const MOVESETS = {
       startup:3, active:1, endlag:20, landLag:0,
       damage:8, angle:90, baseKb:170, kbGrowth:9,
       hitbox:{ ox:0, oy:-16, w:36, h:28 }, hurtboxMod:null,
-      sfxColor:'#66ddff', locksMovement:true,
+      sfxColor:'#66ddff', locksMovement:true, hitstunMult:0.40,
     },
 
     // Down Throw — combo throw at low %, tech-chase at high %.
@@ -809,7 +800,7 @@ const MOVESETS = {
       startup:2, active:1, endlag:22, landLag:0,
       damage:7, angle:75, baseKb:130, kbGrowth:7,
       hitbox:{ ox:0, oy:20, w:36, h:24 }, hurtboxMod:null,
-      sfxColor:'#44ffaa', locksMovement:true,
+      sfxColor:'#44ffaa', locksMovement:true, hitstunMult:0.40,
     },
   },
 
@@ -830,17 +821,7 @@ const MOVESETS = {
       startup:9, active:3, endlag:16, landLag:0,
       damage:8, angle:25, baseKb:190, kbGrowth:6,
       hitbox:{ ox:16, oy:2, w:40, h:26 }, hurtboxMod:null,
-      sfxColor:'#ff9900', locksMovement:false,
-    },
-
-    // Forward Smash — full-body lunge. Earliest KO tool in the game.
-    // startup 22 | active 4 | endlag 28 → total 54f  (very punishable)
-    fsmash: {
-      id:'fsmash', aerial:false,
-      startup:22, active:4, endlag:28, landLag:0,
-      damage:22, angle:30, baseKb:420, kbGrowth:14,
-      hitbox:{ ox:22, oy:-10, w:68, h:50 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true,
+      sfxColor:'#ff9900', locksMovement:false, hitstunMult:0.30,
     },
 
     // ── AERIALS ──────────────────────────────────────────
@@ -852,7 +833,7 @@ const MOVESETS = {
       startup:12, active:8, endlag:20, landLag:16,
       damage:12, angle:40, baseKb:220, kbGrowth:9,
       hitbox:{ ox:0, oy:0, w:56, h:56 }, hurtboxMod:null,
-      sfxColor:'#ff9900', locksMovement:false,
+      sfxColor:'#ff9900', locksMovement:false, hitstunMult:0.30,
     },
 
     // Forward Air — hammer fist. Very slow, kills on hit.
@@ -862,7 +843,7 @@ const MOVESETS = {
       startup:18, active:5, endlag:22, landLag:18,
       damage:16, angle:25, baseKb:300, kbGrowth:12,
       hitbox:{ ox:18, oy:6, w:54, h:36 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:true,
+      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.30,
     },
 
     // Back Air — elbow smash. Fastest aerial, still slow overall.
@@ -872,7 +853,7 @@ const MOVESETS = {
       startup:14, active:5, endlag:16, landLag:12,
       damage:14, angle:150, baseKb:260, kbGrowth:11,
       hitbox:{ ox:-18, oy:4, w:50, h:32 }, hurtboxMod:null,
-      sfxColor:'#ffaa00', locksMovement:false,
+      sfxColor:'#ffaa00', locksMovement:false, hitstunMult:0.30,
     },
 
     // Up Air — headbutt upward. Vertical KO near top blast zone.
@@ -882,7 +863,7 @@ const MOVESETS = {
       startup:16, active:6, endlag:18, landLag:14,
       damage:15, angle:88, baseKb:280, kbGrowth:11,
       hitbox:{ ox:-4, oy:-44, w:56, h:46 }, hurtboxMod:null,
-      sfxColor:'#ffcc00', locksMovement:true,
+      sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.30,
     },
 
     // Down Air — SPIKE. Meteor crash — devastating but very slow.
@@ -892,7 +873,7 @@ const MOVESETS = {
       startup:20, active:6, endlag:24, landLag:28,
       damage:18, angle:270, baseKb:360, kbGrowth:10,
       hitbox:{ ox:-6, oy:40, w:56, h:36 }, hurtboxMod:null,
-      sfxColor:'#ff2200', locksMovement:true,
+      sfxColor:'#ff2200', locksMovement:true, hitstunMult:0.30,
     },
 
     // ── SPECIALS ─────────────────────────────────────────
@@ -904,7 +885,7 @@ const MOVESETS = {
       startup:24, active:6, endlag:30, landLag:0,
       damage:20, angle:80, baseKb:380, kbGrowth:12,
       hitbox:{ ox:-8, oy:20, w:64, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff4400', locksMovement:true,
+      sfxColor:'#ff4400', locksMovement:true, hitstunMult:0.60,
     },
 
     // Side Special — Bull Rush. Armoured horizontal charge.
@@ -914,7 +895,7 @@ const MOVESETS = {
       startup:14, active:12, endlag:20, landLag:16,
       damage:13, angle:20, baseKb:240, kbGrowth:9,
       hitbox:{ ox:20, oy:0, w:56, h:48 }, hurtboxMod:null,
-      sfxColor:'#ff8800', locksMovement:false,
+      sfxColor:'#ff8800', locksMovement:false, hitstunMult:0.60,
     },
 
     // Up Special — Rocket Jump. Damages below, poor recovery distance.
@@ -924,7 +905,7 @@ const MOVESETS = {
       startup:10, active:10, endlag:32, landLag:26,
       damage:12, angle:270, baseKb:200, kbGrowth:6,
       hitbox:{ ox:-4, oy:24, w:56, h:40 }, hurtboxMod:null,
-      sfxColor:'#ffcc00', locksMovement:true,
+      sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.60,
     },
 
     // Down Special — Earthquake. Hits both sides at ground level.
@@ -934,7 +915,7 @@ const MOVESETS = {
       startup:18, active:14, endlag:24, landLag:0,
       damage:15, angle:50, baseKb:260, kbGrowth:10,
       hitbox:{ ox:-30, oy:24, w:108, h:24 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:true,
+      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.60,
     },
 
     // ── GRAB + THROWS ────────────────────────────────────
@@ -946,7 +927,7 @@ const MOVESETS = {
       startup:10, active:4, endlag:18, landLag:0,
       damage:0, angle:0, baseKb:0, kbGrowth:0,
       hitbox:{ ox:14, oy:2, w:44, h:28 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true,
+      sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.40,
     },
 
     // Forward Throw — power toss, direct KO threat near ledge.
@@ -955,7 +936,7 @@ const MOVESETS = {
       startup:3, active:1, endlag:20, landLag:0,
       damage:13, angle:30, baseKb:290, kbGrowth:10,
       hitbox:{ ox:14, oy:4, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff9900', locksMovement:true,
+      sfxColor:'#ff9900', locksMovement:true, hitstunMult:0.40,
     },
 
     // Back Throw — spinning toss, highest raw throw KB.
@@ -964,7 +945,7 @@ const MOVESETS = {
       startup:4, active:1, endlag:22, landLag:0,
       damage:15, angle:160, baseKb:320, kbGrowth:11,
       hitbox:{ ox:-14, oy:4, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ffaa00', locksMovement:true,
+      sfxColor:'#ffaa00', locksMovement:true, hitstunMult:0.40,
     },
 
     // Up Throw — catapult into ceiling, combo extension.
@@ -973,7 +954,7 @@ const MOVESETS = {
       startup:4, active:1, endlag:24, landLag:0,
       damage:10, angle:90, baseKb:230, kbGrowth:10,
       hitbox:{ ox:0, oy:-20, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ffcc00', locksMovement:true,
+      sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.40,
     },
 
     // Down Throw — pile-driver. Combo starter at low %, kills at very high %.
@@ -982,7 +963,7 @@ const MOVESETS = {
       startup:4, active:1, endlag:26, landLag:0,
       damage:12, angle:78, baseKb:180, kbGrowth:9,
       hitbox:{ ox:0, oy:24, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:true,
+      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.40,
     },
   },
 
@@ -1003,17 +984,7 @@ const MOVESETS = {
       startup:2, active:3, endlag:6, landLag:0,
       damage:2, angle:20, baseKb:60, kbGrowth:3,
       hitbox:{ ox:12, oy:6, w:28, h:16 }, hurtboxMod:null,
-      sfxColor:'#aaff88', locksMovement:false,
-    },
-
-    // Forward Smash — charged energy blast. KO move, telegraphed.
-    // startup 14 | active 8 | endlag 18 → total 40f
-    fsmash: {
-      id:'fsmash', aerial:false,
-      startup:14, active:8, endlag:18, landLag:0,
-      damage:13, angle:15, baseKb:240, kbGrowth:10,
-      hitbox:{ ox:22, oy:2, w:62, h:24 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true,
+      sfxColor:'#aaff88', locksMovement:false, hitstunMult:0.30,
     },
 
     // ── AERIALS ──────────────────────────────────────────
@@ -1025,7 +996,7 @@ const MOVESETS = {
       startup:5, active:12, endlag:9, landLag:6,
       damage:6, angle:50, baseKb:100, kbGrowth:5,
       hitbox:{ ox:0, oy:0, w:40, h:40 }, hurtboxMod:null,
-      sfxColor:'#aaff88', locksMovement:false,
+      sfxColor:'#aaff88', locksMovement:false, hitstunMult:0.30,
     },
 
     // Forward Air — arcing beam shot. Long active window, chains off zoning.
@@ -1035,7 +1006,7 @@ const MOVESETS = {
       startup:7, active:8, endlag:10, landLag:7,
       damage:8, angle:18, baseKb:130, kbGrowth:6,
       hitbox:{ ox:18, oy:4, w:52, h:22 }, hurtboxMod:null,
-      sfxColor:'#88ff44', locksMovement:false,
+      sfxColor:'#88ff44', locksMovement:false, hitstunMult:0.30,
     },
 
     // Back Air — reverse kick. Solid knockback for a zoner, edgeguard tool.
@@ -1045,7 +1016,7 @@ const MOVESETS = {
       startup:6, active:5, endlag:11, landLag:8,
       damage:10, angle:160, baseKb:160, kbGrowth:8,
       hitbox:{ ox:-18, oy:6, w:40, h:24 }, hurtboxMod:null,
-      sfxColor:'#ccff44', locksMovement:false,
+      sfxColor:'#ccff44', locksMovement:false, hitstunMult:0.30,
     },
 
     // Up Air — upward energy pulse. Juggle tool, weak but fast.
@@ -1055,7 +1026,7 @@ const MOVESETS = {
       startup:5, active:7, endlag:8, landLag:5,
       damage:7, angle:84, baseKb:110, kbGrowth:6,
       hitbox:{ ox:-4, oy:-36, w:40, h:36 }, hurtboxMod:null,
-      sfxColor:'#88ffcc', locksMovement:false,
+      sfxColor:'#88ffcc', locksMovement:false, hitstunMult:0.30,
     },
 
     // Down Air — SPIKE. Concentrated beam shot downward.
@@ -1066,7 +1037,7 @@ const MOVESETS = {
       startup:10, active:4, endlag:14, landLag:16,
       damage:11, angle:270, baseKb:200, kbGrowth:7,
       hitbox:{ ox:-2, oy:30, w:28, h:28 }, hurtboxMod:null,
-      sfxColor:'#44ffcc', locksMovement:true,
+      sfxColor:'#44ffcc', locksMovement:true, hitstunMult:0.30,
     },
 
     // ── SPECIALS ─────────────────────────────────────────
@@ -1078,7 +1049,7 @@ const MOVESETS = {
       startup:12, active:40, endlag:14, landLag:0,
       damage:6, angle:10, baseKb:90, kbGrowth:5,
       hitbox:{ ox:28, oy:8, w:24, h:20 }, hurtboxMod:null,
-      sfxColor:'#44ff88', locksMovement:false,
+      sfxColor:'#44ff88', locksMovement:false, hitstunMult:0.60,
     },
 
     // Side Special — Dash Burst. Quick teleport-dash with trailing hitbox.
@@ -1088,7 +1059,7 @@ const MOVESETS = {
       startup:6, active:4, endlag:12, landLag:8,
       damage:7, angle:30, baseKb:110, kbGrowth:5,
       hitbox:{ ox:16, oy:2, w:44, h:28 }, hurtboxMod:null,
-      sfxColor:'#aaffcc', locksMovement:false,
+      sfxColor:'#aaffcc', locksMovement:false, hitstunMult:0.60,
     },
 
     // Up Special — Boost Jet. Fast vertical recovery, weak hitbox on ascent.
@@ -1098,7 +1069,7 @@ const MOVESETS = {
       startup:4, active:14, endlag:22, landLag:14,
       damage:5, angle:88, baseKb:100, kbGrowth:4,
       hitbox:{ ox:-2, oy:-36, w:32, h:50 }, hurtboxMod:null,
-      sfxColor:'#ccffaa', locksMovement:true,
+      sfxColor:'#ccffaa', locksMovement:true, hitstunMult:0.60,
     },
 
     // Down Special — Mine Drop. Deploys stationary hitbox (simulated via long active).
@@ -1108,7 +1079,7 @@ const MOVESETS = {
       startup:8, active:50, endlag:10, landLag:0,
       damage:9, angle:55, baseKb:120, kbGrowth:6,
       hitbox:{ ox:0, oy:28, w:28, h:20 }, hurtboxMod:null,
-      sfxColor:'#ffff44', locksMovement:false,
+      sfxColor:'#ffff44', locksMovement:false, hitstunMult:0.60,
     },
 
     // ── GRAB + THROWS ────────────────────────────────────
@@ -1120,7 +1091,7 @@ const MOVESETS = {
       startup:5, active:3, endlag:12, landLag:0,
       damage:0, angle:0, baseKb:0, kbGrowth:0,
       hitbox:{ ox:16, oy:6, w:40, h:20 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true,
+      sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.40,
     },
 
     // Forward Throw — light toss. Sets up zoning pressure.
@@ -1129,7 +1100,7 @@ const MOVESETS = {
       startup:2, active:1, endlag:14, landLag:0,
       damage:6, angle:25, baseKb:130, kbGrowth:6,
       hitbox:{ ox:12, oy:6, w:32, h:24 }, hurtboxMod:null,
-      sfxColor:'#88ff44', locksMovement:true,
+      sfxColor:'#88ff44', locksMovement:true, hitstunMult:0.40,
     },
 
     // Back Throw — fling away, creates distance for re-zoning.
@@ -1138,7 +1109,7 @@ const MOVESETS = {
       startup:3, active:1, endlag:14, landLag:0,
       damage:7, angle:160, baseKb:150, kbGrowth:7,
       hitbox:{ ox:-12, oy:6, w:32, h:24 }, hurtboxMod:null,
-      sfxColor:'#ccff44', locksMovement:true,
+      sfxColor:'#ccff44', locksMovement:true, hitstunMult:0.40,
     },
 
     // Up Throw — high-angle toss. Best throw for landing aerials.
@@ -1147,7 +1118,7 @@ const MOVESETS = {
       startup:3, active:1, endlag:16, landLag:0,
       damage:5, angle:88, baseKb:120, kbGrowth:6,
       hitbox:{ ox:0, oy:-14, w:32, h:24 }, hurtboxMod:null,
-      sfxColor:'#aaffcc', locksMovement:true,
+      sfxColor:'#aaffcc', locksMovement:true, hitstunMult:0.40,
     },
 
     // Down Throw — bounces opponent, low angle, combo launcher.
@@ -1156,7 +1127,7 @@ const MOVESETS = {
       startup:2, active:1, endlag:18, landLag:0,
       damage:4, angle:68, baseKb:90, kbGrowth:5,
       hitbox:{ ox:0, oy:20, w:32, h:20 }, hurtboxMod:null,
-      sfxColor:'#88ffcc', locksMovement:true,
+      sfxColor:'#88ffcc', locksMovement:true, hitstunMult:0.40,
     },
   },
 };
@@ -1169,9 +1140,9 @@ const FIGHTER_DEFS = {
   BLADE: {
     color:'#b8d4ff', shadowColor:'rgba(140,180,255,0.55)',
     width:34, height:54,
-    groundSpeed:600, groundAccel:3400,
-    airSpeed:520,    airAccel:2000,
-    groundFrict:0.80, airFrict:0.994,
+    groundSpeed:480, groundAccel:2600,
+    airSpeed:400,    airAccel:1600,
+    groundFrict:0.72, airFrict:0.978,
     jumpVy:-800, dblJumpVy:-680, fastFallVy:950,
     maxJumps:2,
     moveset: MOVESETS.BLADE,
@@ -1184,9 +1155,9 @@ const FIGHTER_DEFS = {
   GRUNT: {
     color:'#cc6622', shadowColor:'rgba(180,80,20,0.6)',
     width:48, height:60,
-    groundSpeed:540, groundAccel:2600,
-    airSpeed:400,    airAccel:1400,
-    groundFrict:0.70, airFrict:0.990,
+    groundSpeed:420, groundAccel:2000,
+    airSpeed:310,    airAccel:1100,
+    groundFrict:0.62, airFrict:0.970,
     jumpVy:-660, dblJumpVy:-520, fastFallVy:1300,
     maxJumps:2,
     moveset: MOVESETS.GRUNT,
@@ -1199,9 +1170,9 @@ const FIGHTER_DEFS = {
   VEX: {
     color:'#88ff44', shadowColor:'rgba(100,220,40,0.5)',
     width:28, height:44,
-    groundSpeed:680, groundAccel:4200,
-    airSpeed:640,    airAccel:3200,
-    groundFrict:0.86, airFrict:0.998,
+    groundSpeed:540, groundAccel:3200,
+    airSpeed:500,    airAccel:2400,
+    groundFrict:0.76, airFrict:0.974,
     jumpVy:-840, dblJumpVy:-760, fastFallVy:780,
     maxJumps:3,      // triple jump — adds to zoning / approach options
     moveset: MOVESETS.VEX,
@@ -1657,7 +1628,7 @@ class Fighter {
       const l   = keyHeld(ctl.left), r = keyHeld(ctl.right);
       const u   = keyHeld(ctl.up),   d = keyHeld(ctl.down);
 
-      // NORMAL button — directional aerial in air, jab/fsmash on ground
+      // NORMAL button — directional aerial in air, jab on ground
       if (keyJust(ctl.normal)) {
         if (air) {
           // Direction picks the aerial: up→uair, down→dair,
@@ -1669,8 +1640,7 @@ class Fighter {
           else if (l || r)                          this.tryMove('fair');
           else                                      this.tryMove('nair');
         } else {
-          // Hold left/right = smash, neutral = jab
-          this.tryMove((l || r) ? 'fsmash' : 'jab');
+          this.tryMove('jab');
         }
       }
 
