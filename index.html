@@ -2635,14 +2635,16 @@ class MainMenuScene extends Scene {
     uiVignette();
 
     // ── Title block ───────────────────────────
-    const titleY = H * 0.26;
-    uiText('PLATFORM', CX, titleY - 28, { size: Math.round(W * 0.072), color: '#00ffc8', glow: '#00ffc8' });
-    uiText('FIGHTER',  CX, titleY + 34, { size: Math.round(W * 0.072), color: '#ffffff' });
+    const titleY    = H * 0.26;
+    const fontSize  = Math.min(Math.round(W * 0.072), 96); // cap so it never outgrows spacing
+    const lineGap   = Math.round(fontSize * 1.15);         // spacing scales with the font
+    uiText('PLATFORM', CX, titleY - lineGap * 0.5, { size: fontSize, color: '#00ffc8', glow: '#00ffc8' });
+    uiText('FIGHTER',  CX, titleY + lineGap * 0.5, { size: fontSize, color: '#ffffff' });
 
-    // Subtitle
-    uiMonoText('v0.5  —  ENGINE BUILD', CX, titleY + 76, { size: 12, color: '#4a5568' });
-
-    uiSeparator(titleY + 100);
+    // Subtitle and separator anchored below the second title word
+    const titleBottom = titleY + lineGap * 0.5 + Math.round(fontSize * 0.6);
+    uiMonoText('v0.5  —  ENGINE BUILD', CX, titleBottom + 22, { size: 12, color: '#4a5568' });
+    uiSeparator(titleBottom + 46);
 
     // ── Menu options ──────────────────────────
     const optY    = H * 0.56;
