@@ -178,7 +178,7 @@
 
   <div id="hud">
     <div class="fighter-panel p1">
-      <div class="name">BLADE</div>
+      <div class="name">MARTH</div>
       <div class="dmg-counter" id="p1-dmg">0%</div>
       <div class="stat-row">STATE  <span class="stat-val" id="p1-state">IDLE</span></div>
       <div class="stat-row">MOVE   <span class="stat-val" id="p1-move">—</span></div>
@@ -219,7 +219,7 @@
     </div>
 
     <div class="fighter-panel p2">
-      <div class="name">GRUNT</div>
+      <div class="name">MARTH</div>
       <div class="dmg-counter" id="p2-dmg">0%</div>
       <div class="stat-row">STATE  <span class="stat-val" id="p2-state">IDLE</span></div>
       <div class="stat-row">MOVE   <span class="stat-val" id="p2-move">—</span></div>
@@ -2779,12 +2779,12 @@ const ledges = [
 //  FIGHTER INSTANCES
 // ═══════════════════════════════════════════════════════════
 const fighters = [
-  new Fighter('BLADE', 310, 300, {
+  new Fighter('MARTH', 310, 300, {
     left:'KeyA', right:'KeyD', up:'KeyW', down:'KeyS', jump:'KeyW',
     normal:'KeyJ', special:'KeyK', grab:'KeyL',
     shield:'KeyF', dodge:'KeyG',
   }),
-  new Fighter('GRUNT', 650, 300, {
+  new Fighter('MARTH', 650, 300, {
     left:'ArrowLeft', right:'ArrowRight', up:'ArrowUp', down:'ArrowDown', jump:'ArrowUp',
     normal:'Numpad1', special:'Numpad2', grab:'Numpad3',
     shield:'Numpad5', dodge:'Numpad6',
@@ -3184,30 +3184,6 @@ function easeInOut(t, duration) {
 // ═══════════════════════════════════════════════════════════
 const ROSTER = [
   {
-    defName:     'BLADE',
-    displayName: 'BLADE',
-    subtitle:    'Balanced Swordfighter',
-    color:       '#b8d4ff',
-    stats: { speed: 0.62, weight: 0.55, power: 0.60, range: 0.80 },
-    description: 'Balanced fighter with long disjointed reach.',
-  },
-  {
-    defName:     'GRUNT',
-    displayName: 'GRUNT',
-    subtitle:    'Heavy Melee Brawler',
-    color:       '#cc6622',
-    stats: { speed: 0.36, weight: 0.92, power: 0.95, range: 0.44 },
-    description: 'Slow but devastating. One hit can end stocks early.',
-  },
-  {
-    defName:     'VEX',
-    displayName: 'VEX',
-    subtitle:    'Lightweight Zoner',
-    color:       '#88ff44',
-    stats: { speed: 0.88, weight: 0.22, power: 0.30, range: 0.85 },
-    description: 'Elusive and projectile-based. Hard to catch, kills late.',
-  },
-  {
     defName:     'MARTH',
     displayName: 'MARTH',
     subtitle:    'Noble Swordfighter',
@@ -3224,7 +3200,7 @@ const ROSTER = [
 // ═══════════════════════════════════════════════════════════
 const MatchConfig = {
   p1RosterIdx:  0,
-  p2RosterIdx:  1,
+  p2RosterIdx:  0,
   p2IsCPU:      false,
   stocks:        3,
   timeLimit:     0,      // 0 = no timer
