@@ -200,7 +200,11 @@ const MARTH_ANIMS = (() => {
 // ============================================================
 
 class SpriteAnimator {
-  constructor() {
+  /**
+   * @param {object} anims  The animation table (MARTH_ANIMS or AERIS_ANIMS).
+   */
+  constructor(anims) {
+    this._anims        = anims;    // which frame table to look up
     // State machine fields — all mutation happens through setAnim / forceSet / update
     this.currentState  = 'idle';   // active animation name
     this.frameIndex    = 0;        // current frame within the animation
@@ -230,7 +234,7 @@ class SpriteAnimator {
    * @param {number}  frameDuration Game ticks per sprite frame (default 3).
    */
   setAnim(name, loop = true, frameDuration = 3) {
-    if (!MARTH_ANIMS[name]) return;       // guard: unknown animation name
+    if (!this._anims[name]) return;       // guard: unknown animation name
     if (name === this.currentState) return; // already playing — preserve continuity
     // Switching to a new animation always resets (even if done)
     this._startAnimation(name, loop, frameDuration);
@@ -245,7 +249,7 @@ class SpriteAnimator {
    * @param {number}  frameDuration Default 2 — attacks play slightly faster.
    */
   forceSet(name, loop = false, frameDuration = 2) {
-    if (!MARTH_ANIMS[name]) return;
+    if (!this._anims[name]) return;
     this._startAnimation(name, loop, frameDuration);
   }
 
@@ -254,7 +258,7 @@ class SpriteAnimator {
    * Call this once per physics tick inside Fighter.update().
    */
   update() {
-    const frames = MARTH_ANIMS[this.currentState];
+    const frames = this._anims[this.currentState];
     if (!frames || frames.length === 0) return;
 
     this.frameTimer++;
@@ -281,7 +285,7 @@ class SpriteAnimator {
    * @returns {{x,y,w,h} | null}
    */
   currentFrame() {
-    const frames = MARTH_ANIMS[this.currentState];
+    const frames = this._anims[this.currentState];
     if (!frames) return null;
     return frames[Math.min(this.frameIndex, frames.length - 1)];
   }
@@ -292,7 +296,7 @@ class SpriteAnimator {
    * @returns {boolean}
    */
   isHitboxFrame() {
-    const frames = MARTH_ANIMS[this.currentState];
+    const frames = this._anims[this.currentState];
     if (!frames?.hitboxFrames) return false;
     const [start, end] = frames.hitboxFrames;
     return this.frameIndex >= start && this.frameIndex <= end;
@@ -412,6 +416,156 @@ function getMarthAnim(fighter) {
 // ============================================================
 
 
+
+// ── Aeris sprite sheet ────────────────────────────────────
+// Sheet layout (1680×1110, RGBA, 140×185 cells, 12 cols max):
+//   Row 0  y=0    — idle        (11 frames)
+//   Row 1  y=185  — run         ( 8 frames)
+//   Row 2  y=370  — jump/land   ( 8 frames)
+//   Row 3  y=555  — jab/attack  (10 frames)
+//   Row 4  y=740  — nair+fair   (10 frames)
+//   Row 5  y=925  — bair+uair+dash(11 frames)
+const AERIS_SHEET = new SpriteLoader('aeris.png');
+
+const AERIS_ANIMS = (() => {
+  // Each frame: [x, y, w, h] — top-left corner inside the sheet.
+  // Cells are 140×185 px; all sprites are centered within cells.
+  const CW = 140, CH = 185;
+  function row(rowIdx, count) {
+    // Build `count` evenly-spaced frames along a single row
+    const frames = [];
+    for (let i = 0; i < count; i++) {
+      frames.push([i * CW, rowIdx * CH, CW, CH]);
+    }
+    return frames;
+  }
+
+  const raw = {
+    idle:       row(0, 11),
+    run:        row(1,  8),
+    // jump row: frames 0-2 = jump, 3-4 = fall, 5-7 = land
+    jump:       [row(2,8)[0], row(2,8)[1], row(2,8)[2]],
+    fall:       [row(2,8)[3], row(2,8)[4]],
+    land:       [row(2,8)[5], row(2,8)[6], row(2,8)[7]],
+    jab:        row(3, 10),
+    nair:       [row(4,10)[0], row(4,10)[1], row(4,10)[2], row(4,10)[3]],
+    fair:       [row(4,10)[4], row(4,10)[5], row(4,10)[6], row(4,10)[7], row(4,10)[8], row(4,10)[9]],
+    bair:       [row(5,11)[0], row(5,11)[1], row(5,11)[2], row(5,11)[3]],
+    uair:       [row(5,11)[4], row(5,11)[5], row(5,11)[6]],
+    dashAttack: [row(5,11)[7], row(5,11)[8], row(5,11)[9], row(5,11)[10]],
+    // Aliases for states not in sheet — reuse closest match
+    dblJump:    row(2,8).slice(1, 4),
+    fastFall:   row(2,8).slice(3, 5),
+    ledgeHang:  row(0,11).slice(0, 3),
+    dash:       row(1,8).slice(0, 4),
+    dashTurn:   row(1,8).slice(3, 6),
+    shield:     row(0,11).slice(5, 8),
+    rollF:      row(1,8),
+    rollB:      row(1,8),
+    airdodge:   row(2,8).slice(1, 5),
+    jab2:       [row(3,10)[3], row(3,10)[4]],
+    fsmash:     row(3,10).slice(1, 8),
+    usmash:     row(3,10).slice(2, 7),
+    dsmashOut:  row(3,10).slice(0, 6),
+    dsmashIn:   row(3,10).slice(5, 10),
+    grab:       row(0,11).slice(0, 3),
+    throwF:     row(3,10).slice(6, 10),
+    throwB:     row(3,10).slice(0, 2),
+    throwU:     row(3,10).slice(2, 5),
+    throwD:     row(3,10).slice(4, 8),
+    grabMiss:   row(0,11).slice(0, 3),
+    neutralB:   row(4,10),
+    sideB:      row(4,10).slice(2, 8),
+    upB:        row(2,8).slice(0, 5),
+    downB:      row(5,11).slice(0, 6),
+    dmgLight:   row(0,11).slice(8, 11),
+    dmgMid:     row(0,11).slice(6, 10),
+    dmgHeavy:   row(0,11).slice(7, 11),
+    dmgAir:     row(2,8).slice(2, 6),
+    tumbleAir:  row(2,8).slice(3, 6),
+    tumbleBig:  row(2,8).slice(2, 7),
+    floorBounce:row(2,8).slice(4, 8),
+    win1:       row(0,11).slice(0, 6),
+    win2:       row(0,11).slice(5, 11),
+  };
+
+  const anims = {};
+  for (const [name, frames] of Object.entries(raw))
+    anims[name] = frames.map(([x, y, w, h]) => ({ x, y, w, h }));
+
+  // Hitbox windows
+  const hitboxWindows = {
+    jab:   [2, 5], jab2:  [0, 1], fair:  [2, 5], bair:  [1, 3],
+    uair:  [1, 2], nair:  [1, 3], fsmash:[3, 6], usmash:[2, 4],
+    dsmashOut:[1,3], dsmashIn:[1,3], dashAttack:[1,3],
+    grab:  [0, 1], throwF:[0, 2], throwB:[0, 1], throwU:[0, 2], throwD:[0, 2],
+    neutralB:[4,8], sideB:[2,5], upB:[1,4], downB:[2,5],
+  };
+  for (const [n, [s, e]] of Object.entries(hitboxWindows))
+    if (anims[n]) anims[n].hitboxFrames = [s, e];
+
+  return anims;
+})();
+
+// ── Aeris animation state machine ────────────────────────
+function getAerisAnim(fighter) {
+  const state    = fighter.state;
+  const moveId   = fighter.currentMove?.id ?? '';
+  const onGround = fighter.onGround;
+  const tick     = fighter.stateTimer;
+
+  if (state === 'STARTUP' || state === 'ACTIVE' || state === 'ENDLAG') {
+    const force = (state === 'STARTUP' && tick <= 1);
+    const moveAnimMap = {
+      jab: 'jab', dashAttack: 'dashAttack',
+      nair: 'nair', fair: 'fair', bair: 'bair', uair: 'uair',
+      fsmash: 'fsmash', usmash: 'usmash', dsmash: 'dsmashOut',
+      grab: 'grab', fthrow: 'throwF', bthrow: 'throwB',
+      uthrow: 'throwU', dthrow: 'throwD',
+      neutralSpecial: 'neutralB', sideSpecial: 'sideB',
+      upSpecial: 'upB', downSpecial: 'downB',
+    };
+    const animName = moveAnimMap[moveId];
+    if (animName) return { name: animName, loop: false, frameDuration: 2, force };
+    return { name: 'idle', loop: true, frameDuration: 3, force: false };
+  }
+
+  if (state === 'AIRBORNE') {
+    const name = fighter.vy <= 0 ? 'dblJump' : 'fall';
+    return { name, loop: true, frameDuration: 3, force: false };
+  }
+
+  if (state === 'HITSTUN') {
+    const name = onGround
+      ? (Math.abs(fighter.vy) > 200 ? 'dmgMid' : 'dmgLight')
+      : (Math.abs(fighter.vy) > 500 ? 'tumbleAir' : 'dmgAir');
+    return { name, loop: true, frameDuration: 3, force: false };
+  }
+
+  const stateAnimMap = {
+    IDLE:        { name: 'idle',      loop: true,  frameDuration: 4 },
+    WALK:        { name: 'run',       loop: true,  frameDuration: 4 },
+    RUN:         { name: 'run',       loop: true,  frameDuration: 3 },
+    DASH:        { name: 'dash',      loop: false, frameDuration: 3 },
+    CROUCH:      { name: 'shield',    loop: true,  frameDuration: 5 },
+    JUMP:        { name: 'jump',      loop: false, frameDuration: 2 },
+    FASTFALL:    { name: 'fastFall',  loop: false, frameDuration: 3 },
+    LANDING:     { name: 'land',      loop: false, frameDuration: 2 },
+    LANDLAG:     { name: 'land',      loop: false, frameDuration: 2 },
+    SHIELD:      { name: 'shield',    loop: true,  frameDuration: 4 },
+    SHIELDSTUN:  { name: 'shield',    loop: false, frameDuration: 3 },
+    SHIELDBREAK: { name: 'dmgHeavy', loop: true,  frameDuration: 4 },
+    ROLL_F:      { name: 'rollF',     loop: false, frameDuration: 3 },
+    ROLL_B:      { name: 'rollB',     loop: false, frameDuration: 3 },
+    AIRDODGE:    { name: 'airdodge',  loop: false, frameDuration: 2 },
+    LEDGE:       { name: 'ledgeHang', loop: true,  frameDuration: 4 },
+  };
+
+  const entry = stateAnimMap[state];
+  if (entry) return { ...entry, force: false };
+  return { name: 'idle', loop: true, frameDuration: 3, force: false };
+}
+
 // ── MARTH fighter definition ─────────────────────────────
 // Added to FIGHTER_DEFS after the object is created (see below).
 // Reuses BLADE's moveset — Marth plays identically but renders with sprites.
@@ -431,6 +585,27 @@ const MARTH_DEF_ENTRY = {
   spriteOffsetX: -4,       // nudge sprite to align with collision box
   spriteOffsetY: -2,
   // moveset assigned after MOVESETS are defined — see FIGHTER_DEFS injection below
+};
+
+
+// ── AERIS fighter definition ─────────────────────────────
+// Balanced swordfighter — good speed, average weight, versatile moveset.
+// Uses her own sprite sheet (aeris.png) and getAerisAnim() state machine.
+const AERIS_DEF_ENTRY = {
+  color: '#40e0d0', shadowColor: 'rgba(64,224,208,0.55)',
+  width: 44, height: 56,
+  weight: 98,
+  groundSpeed: 500, groundAccel: 2600,
+  airSpeed:    420, airAccel:    1750,
+  groundFrict: 0.72, airFrict:  0.978,
+  jumpVy: -820, dblJumpVy: -700, fastFallVy: 940,
+  maxJumps: 2,
+  sprite:       true,
+  spriteSheet:  'AERIS',       // key used by Fighter.draw() to pick the right sheet
+  spriteScale:  1.0,           // sheet cells are already 140×185 — scale 1 = native
+  spriteOffsetX: 0,
+  spriteOffsetY: 2,
+  animFn:       'AERIS',       // key into ANIM_FN_MAP
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1385,8 +1560,29 @@ const FIGHTER_DEFS = {
   // ── Sprite Fighter — Marth ───────────────────────────────
   // Plays like BLADE (reuses moveset) but renders with the Crusade sprite sheet.
   // sprite:true activates SpriteAnimator path in Fighter.draw().
-  MARTH: Object.assign({}, MARTH_DEF_ENTRY, { moveset: MOVESETS.BLADE }),
+  MARTH:  Object.assign({}, MARTH_DEF_ENTRY,  { moveset: MOVESETS.BLADE }),
+  AERIS:  Object.assign({}, AERIS_DEF_ENTRY,  { moveset: MOVESETS.BLADE }),
 };
+
+
+// ── Per-character sprite sheet and animation function maps ──
+// Fighter.draw() uses d.spriteSheet to look up the correct SpriteLoader.
+// Fighter.update() uses d.animFn to call the right getMarthAnim / getAerisAnim.
+const SPRITE_SHEET_MAP = {
+  MARTH: MARTH_SHEET,
+  AERIS: AERIS_SHEET,
+};
+const ANIM_FN_MAP = {
+  MARTH: getMarthAnim,
+  AERIS: getAerisAnim,
+};
+const ANIM_TABLE_MAP = {
+  MARTH: MARTH_ANIMS,
+  AERIS: AERIS_ANIMS,
+};
+// MARTH_DEF_ENTRY didn't have spriteSheet/animFn — patch them in now
+MARTH_DEF_ENTRY.spriteSheet = 'MARTH';
+MARTH_DEF_ENTRY.animFn      = 'MARTH';
 
 // ═══════════════════════════════════════════════════════════
 //  INPUT
@@ -1513,8 +1709,12 @@ class Fighter {
     this._hitEffects    = [];  // { x,y, color, life, maxLife } cosmetic bursts
     this._blasted       = false; // set true when fighter leaves blast zone; cleared by GameScene on respawn
 
-    // ── Sprite animator (Marth / any sprite-def fighter) ──
-    this.spriteAnim = this.def.sprite ? new SpriteAnimator() : null;
+    // ── Sprite animator (any sprite-def fighter) ──────────
+    // Resolve sprite resources from maps (keys set on each def entry)
+    const animTable   = this.def.sprite ? (ANIM_TABLE_MAP[this.def.animFn]         ?? MARTH_ANIMS)   : null;
+    this.spriteAnim   = this.def.sprite ? new SpriteAnimator(animTable) : null;
+    this._sheet       = this.def.sprite ? (SPRITE_SHEET_MAP[this.def.spriteSheet]  ?? MARTH_SHEET)   : null;
+    this._animFn      = this.def.sprite ? (ANIM_FN_MAP[this.def.animFn]            ?? getMarthAnim)  : null;
   }
 
   // ── Bounds (body rect) ─────────────────────
@@ -1671,7 +1871,7 @@ class Fighter {
 
     // ── Sprite animator tick ──────────────────
     if (this.spriteAnim) {
-      const { name, loop, frameDuration, force } = getMarthAnim(this);
+      const { name, loop, frameDuration, force } = this._animFn(this);
       if (force) {
         this.spriteAnim.forceSet(name, loop, frameDuration);
       } else {
@@ -2105,7 +2305,7 @@ class Fighter {
         const sc = d.spriteScale ?? 3;
         const sx = Math.round(this.x + ghostOff + (d.spriteOffsetX ?? 0));
         const sy = Math.round(this.y + (d.spriteOffsetY ?? 0));
-        MARTH_SHEET.drawFrame(ctx, frame, sx, sy, sc, this.facing, 0.22);
+        this._sheet.drawFrame(ctx, frame, sx, sy, sc, this.facing, 0.22);
       } else {
         ctx.fillStyle = d.color;
         const ghostOff = -this.dodgeDir * 18;
@@ -2121,7 +2321,7 @@ class Fighter {
     }
 
     // ── Body / Sprite ─────────────────────────
-    if (d.sprite && this.spriteAnim && MARTH_SHEET.ready) {
+    if (d.sprite && this.spriteAnim && this._sheet?.ready) {
       // ── Sprite path ────────────────────────
       const frame = this.spriteAnim.currentFrame();
       const sc    = d.spriteScale ?? 3;
@@ -2159,7 +2359,7 @@ class Fighter {
         else if (this.state === State.HITSTUN) { tintColor='#ffffff'; tintAlpha=0.30; }
         else if (this.state === State.LEDGE)   { tintColor='#00ffc8'; tintAlpha=0.15; }
 
-        MARTH_SHEET.drawFrame(ctx, frame, sx, sy, sc, this.facing);
+        this._sheet.drawFrame(ctx, frame, sx, sy, sc, this.facing);
 
         // Tint overlay: draw colored rect blended on top
         if (tintColor) {
@@ -2841,6 +3041,14 @@ const ROSTER = [
     stats: { speed: 0.66, weight: 0.52, power: 0.65, range: 0.88 },
     description: 'Elegant swordfighter. Tipper sweetspot rewards precision.',
   },
+  {
+    defName:     'AERIS',
+    displayName: 'AERIS',
+    subtitle:    'Balanced Swordfighter',
+    color:       '#40e0d0',
+    stats: { speed: 0.70, weight: 0.55, power: 0.68, range: 0.82 },
+    description: 'Versatile warrior. Balanced stats with fluid sword combos.',
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════
@@ -3159,18 +3367,36 @@ class CharacterSelectScene extends Scene {
         isActiveSelection ? 2.5 : 1.5,
         isActiveSelection ? 1.0 : 0.5);
 
-      // Fighter silhouette / color block
-      const silH = cardH * 0.38;
-      uiFillRect(x + 16, cardY + 14, cardW - 32, silH, char.color, 0.12);
-      // Fighter body rect (stylized)
-      const bw = cardW * 0.28, bh = cardH * 0.30;
-      const bx = x + (cardW - bw) / 2;
-      const by = cardY + 18;
-      uiFillRect(bx, by, bw, bh, char.color, 0.6);
-      uiRect(bx, by, bw, bh, char.color, 1.5, 0.8);
-      // "Eye"
-      const eyeX = bx + bw * 0.72, eyeY = by + bh * 0.28;
-      uiFillRect(eyeX - 3, eyeY - 3, 6, 6, '#ffffff', 0.9);
+      // Fighter sprite preview
+      const silH = cardH * 0.48;
+      uiFillRect(x + 8, cardY + 8, cardW - 16, silH, char.color, 0.07);
+      // Draw the idle frame 0 of the character's sprite sheet
+      const previewDef = FIGHTER_DEFS[char.defName];
+      const previewSheet = previewDef?.spriteSheet ? SPRITE_SHEET_MAP[previewDef.spriteSheet] : null;
+      const previewAnims = previewDef?.animFn ? ANIM_TABLE_MAP[previewDef.animFn] : null;
+      if (previewSheet?.ready && previewAnims?.idle?.[0]) {
+        const pFrame = previewAnims.idle[0];
+        // Scale to fit inside the silH area
+        const maxH = silH - 10;
+        const sc = previewDef.spriteScale ?? 1;
+        const naturalH = pFrame.h * sc;
+        const drawSc = Math.min(sc, maxH / pFrame.h);
+        const dw = pFrame.w * drawSc;
+        const dh = pFrame.h * drawSc;
+        const px = x + (cardW - dw) / 2;
+        const py = cardY + 8 + (silH - dh);
+        uiCtx.save();
+        uiCtx.globalAlpha = isActiveSelection ? 1.0 : 0.85;
+        uiCtx.imageSmoothingEnabled = false;
+        uiCtx.drawImage(previewSheet.img, pFrame.x, pFrame.y, pFrame.w, pFrame.h, px, py, dw, dh);
+        uiCtx.restore();
+      } else {
+        // Fallback: colored rect while sheet loads
+        const bw = cardW * 0.28, bh = cardH * 0.30;
+        const bx = x + (cardW - bw) / 2;
+        const by = cardY + 18;
+        uiFillRect(bx, by, bw, bh, char.color, 0.6);
+      }
 
       // Character name
       uiText(char.displayName, x + cardW/2, cardY + silH + 22,
