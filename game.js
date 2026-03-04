@@ -41,8 +41,11 @@ const CHARACTERS = [
       run:  { frameCount:  8, frameRate: 12, loop: true,  frameW: 192, frameH: 628, sheetY: 49  },
       jump: { frameCount:  9, frameRate: 10, loop: false, frameW: 170, frameH: 722, sheetY: 38  },
     },
-    displayScale: 0.26,
-    feetOffsetY: 0.92,
+    // targetHeight: the desired on-screen pixel height of Aeris.
+    // Scale is computed per-draw as targetHeight / frameH, so all
+    // animations render at the same size regardless of sheet dimensions.
+    targetHeight: 160,
+    feetOffsetY: 0.88,
   },
 ];
 
@@ -164,18 +167,49 @@ function loadImage(src) {
 }
 
 /**
- * Background removal is handled offline — the PNG files already have
- * transparent backgrounds. This function is kept as a no-op passthrough
- * so the loading pipeline stays intact if you ever swap in raw sheets.
- * Returns the canvas element (same interface as before).
+ * Removes the background from a sprite sheet at load time.
+ * Detects whether the sheet has a black bg (idle) or grey bg (run/jump)
+ * by sampling the corner pixels, then zeros out any pixel within
+ * `tolerance` of that colour.
+ * Returns an HTMLCanvasElement usable as a drawImage source.
  */
-function removeBackground(img) {
+function removeBackground(img, tolerance = 30) {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(img, 0, 0);
+  const data = tctx.getImageData(0, 0, w, h);
+  const px = data.data;
+
+  // Sample all four corners and average them to get background colour
+  function sampleRGB(x, y) {
+    const i = (y * w + x) * 4;
+    return [px[i], px[i+1], px[i+2]];
+  }
+  const corners = [sampleRGB(0,0), sampleRGB(w-1,0), sampleRGB(0,h-1), sampleRGB(w-1,h-1)];
+  const bg = [
+    corners.reduce((s,c) => s+c[0], 0) / 4,
+    corners.reduce((s,c) => s+c[1], 0) / 4,
+    corners.reduce((s,c) => s+c[2], 0) / 4,
+  ];
+
+  for (let i = 0; i < px.length; i += 4) {
+    const dr = Math.abs(px[i]   - bg[0]);
+    const dg = Math.abs(px[i+1] - bg[1]);
+    const db = Math.abs(px[i+2] - bg[2]);
+    if (Math.max(dr, dg, db) < tolerance) {
+      px[i+3] = 0;
+    }
+  }
+
   const out = document.createElement('canvas');
-  out.width  = img.naturalWidth;
-  out.height = img.naturalHeight;
-  out.naturalWidth  = img.naturalWidth;
-  out.naturalHeight = img.naturalHeight;
-  out.getContext('2d').drawImage(img, 0, 0);
+  out.width = w; out.height = h;
+  out.naturalWidth  = w;
+  out.naturalHeight = h;
+  out.getContext('2d').putImageData(data, 0, 0);
   return out;
 }
 
@@ -242,6 +276,9 @@ class Player {
     if (input.jumpPressed && this.onGround) {
       this.vy = JUMP_FORCE;
       this.onGround = false;
+      // Reset the jump animation immediately so it plays from frame 0
+      // every time we leave the ground, even if it finished last time.
+      this.animations.jump.reset();
     }
     input.jumpPressed = false; // Consume the press
 
@@ -283,7 +320,8 @@ class Player {
   /** Render the current animation frame */
   draw(ctx) {
     const anim  = this.animations[this.currentAnim];
-    const scale = this.charDef.displayScale;
+    // Derive scale from a fixed target height so all animations stay the same size
+    const scale = this.charDef.targetHeight / anim.frameH;
     const flip  = !this.facingRight;
     anim.draw(ctx, this.x, this.y, scale, flip, this.charDef.feetOffsetY);
   }
@@ -641,8 +679,10 @@ class CharacterSelectScreen {
         anim.update(dt);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Scale so character fills ~85% of the card canvas height
-        const scale = (canvas.height * 0.85) / anim.frameH;
+        // Scale so the character renders at a consistent size in the card,
+        // using the same targetHeight logic as the game so it matches in-game size.
+        const targetH = canvas.height * 0.80;
+        const scale   = targetH / anim.frameH;
         const dw = anim.frameW * scale;
         const dh = anim.frameH * scale;
         const dx = (canvas.width - dw) / 2;
