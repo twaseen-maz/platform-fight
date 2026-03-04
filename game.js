@@ -84,6 +84,7 @@ class Animation {
 
     this.elapsed += dt;
     const frameDuration = 1 / this.frameRate;
+    const prevFrame = this.currentFrame;
 
     while (this.elapsed >= frameDuration) {
       this.elapsed -= frameDuration;
@@ -98,6 +99,11 @@ class Animation {
           break;
         }
       }
+    }
+
+    // DEBUG: log every frame change (remove once animation is confirmed working)
+    if (this.currentFrame !== prevFrame) {
+      console.log(`[Anim] frame ${prevFrame} → ${this.currentFrame} | frameCount=${this.frameCount} | frameRate=${this.frameRate} | elapsed=${this.elapsed.toFixed(4)}`);
     }
   }
 
