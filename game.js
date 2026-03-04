@@ -84,26 +84,24 @@ class Animation {
 
     this.elapsed += dt;
     const frameDuration = 1 / this.frameRate;
-    const prevFrame = this.currentFrame;
 
-    while (this.elapsed >= frameDuration) {
+    // Advance ONE frame maximum per update call — prevents dt spikes from
+    // burning through multiple frames in a single tick (the root cause of
+    // the sliding/strobing effect).
+    if (this.elapsed >= frameDuration) {
       this.elapsed -= frameDuration;
-      this.currentFrame++;
+      // Clamp elapsed so any leftover spike doesn't carry into the next tick
+      if (this.elapsed > frameDuration) this.elapsed = 0;
 
+      this.currentFrame++;
       if (this.currentFrame >= this.frameCount) {
         if (this.loop) {
           this.currentFrame = 0;
         } else {
           this.currentFrame = this.frameCount - 1;
           this.finished = true;
-          break;
         }
       }
-    }
-
-    // DEBUG: log every frame change (remove once animation is confirmed working)
-    if (this.currentFrame !== prevFrame) {
-      console.log(`[Anim] frame ${prevFrame} → ${this.currentFrame} | frameCount=${this.frameCount} | frameRate=${this.frameRate} | elapsed=${this.elapsed.toFixed(4)}`);
     }
   }
 
@@ -546,7 +544,7 @@ class Game {
   _loop(timestamp) {
     this._rafId = requestAnimationFrame(ts => this._loop(ts));
 
-    const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05); // cap at 50ms
+    const dt = Math.min((timestamp - this.lastTime) / 1000, 0.033); // cap at ~30fps
     this.lastTime = timestamp;
 
     this._update(dt);
@@ -633,7 +631,7 @@ class CharacterSelectScreen {
     let last = null;  // null on first frame so dt starts at 0
     const loop = (ts) => {
       this._rafId = requestAnimationFrame(loop);
-      const dt = last === null ? 0 : Math.min((ts - last) / 1000, 0.05);
+      const dt = last === null ? 0 : Math.min((ts - last) / 1000, 0.033);
       last = ts;
 
       for (const entry of Object.values(this._previewAnims)) {
