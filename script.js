@@ -2505,7 +2505,8 @@ function render() {
   drawBackground();
   drawPlatforms();
   drawLedges();
-  fighters.forEach(f => f.draw(ctx));
+  // Only draw fighters during active gameplay — never during menus
+  if (SM._scene?.name === 'Game') fighters.forEach(f => f.draw(ctx));
 
   // Debug overlay banner
   if (debugMode) {
@@ -2906,9 +2907,6 @@ class MainMenuScene extends Scene {
     document.getElementById('app').classList.add('menu-active');
     uiCanvas.classList.add('ui-interactive');
     uiCanvas.style.cursor = 'default';
-    // Black out game canvas so it doesn't show through
-    ctx.fillStyle = '#080810';
-    ctx.fillRect(0, 0, stage.width, stage.height);
   }
 
   exit() {
@@ -3478,11 +3476,13 @@ class PauseScene extends Scene {
     super.enter();
     this._sel   = 0;
     this._pulse = 0;
+    document.getElementById('app').classList.add('menu-active');
     uiCanvas.classList.add('ui-interactive');
     uiCanvas.style.cursor = 'default';
   }
 
   exit() {
+    document.getElementById('app').classList.remove('menu-active');
     uiCanvas.classList.remove('ui-interactive');
     uiCanvas.style.cursor = 'default';
   }
