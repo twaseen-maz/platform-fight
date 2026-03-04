@@ -32,20 +32,20 @@ const CHARACTERS = [
     animations: {
       idle: {
         frames: Array.from({length: 12}, (_, i) => `aeris_idle/aeris_idle_${String(i).padStart(2,'0')}.png`),
-        frameRate: 8, loop: true,
+        frameRate: 15, loop: true,
       },
       run: {
         frames: Array.from({length: 8},  (_, i) => `aeris_run/aeris_run_${String(i).padStart(2,'0')}.png`),
-        frameRate: 12, loop: true,
+        frameRate: 18, loop: true,
       },
       jump: {
         frames: Array.from({length: 9},  (_, i) => `aeris_jump/aeris_jump_${String(i).padStart(2,'0')}.png`),
-        frameRate: 10, loop: false,
+        frameRate: 14, loop: false,
       },
     },
-    // Aeris renders at this height in game pixels; scale is derived per-frame
-    // so she stays the same size regardless of individual frame dimensions.
-    targetHeight: 160,
+    // targetHeight: on-screen pixel height. Scale = targetHeight / frame.naturalHeight
+    // idle frames are 508px tall, run=628, jump=722. All render at targetHeight.
+    targetHeight: 220,
     feetOffsetY:  0.88,
   },
 ];
@@ -127,12 +127,13 @@ class Animation {
     const dy  = Math.round(y - dh * feetOffY);
 
     ctx.save();
+    ctx.imageSmoothingEnabled = false;          // crisp pixel art
+    ctx.globalCompositeOperation = 'source-over'; // normal blending
     if (flipX) {
       ctx.translate(x, 0);
       ctx.scale(-1, 1);
       ctx.translate(-x, 0);
     }
-    // Simple full-image draw — no sheet coordinate math needed
     ctx.drawImage(img, 0, 0, sw, sh, dx, dy, dw, dh);
     ctx.restore();
   }
@@ -623,10 +624,10 @@ class CharacterSelectScreen {
   }
 
   _startPreviewLoop() {
-    let last = performance.now();
+    let last = null;  // null on first frame so dt starts at 0
     const loop = (ts) => {
       this._rafId = requestAnimationFrame(loop);
-      const dt = Math.min((ts - last) / 1000, 0.05);
+      const dt = last === null ? 0 : Math.min((ts - last) / 1000, 0.05);
       last = ts;
 
       for (const entry of Object.values(this._previewAnims)) {
