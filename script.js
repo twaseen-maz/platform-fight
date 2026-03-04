@@ -207,6 +207,7 @@ class SpriteAnimator {
     this.frameTimer    = 0;        // ticks elapsed on this frame
     this.frameDuration = 3;        // ticks to hold each frame (lower = faster)
     this.loop          = true;     // whether to wrap at the end
+    this.done          = false;    // true when a non-looping anim has finished
   }
 
   // ── Internal: start a named animation from frame 0 ─────────
@@ -216,6 +217,7 @@ class SpriteAnimator {
     this.frameTimer    = 0;
     this.loop          = loop;
     this.frameDuration = frameDuration;
+    this.done          = false;  // cleared on every fresh start
   }
 
   /**
@@ -228,8 +230,9 @@ class SpriteAnimator {
    * @param {number}  frameDuration Game ticks per sprite frame (default 3).
    */
   setAnim(name, loop = true, frameDuration = 3) {
-    if (!MARTH_ANIMS[name]) return; // guard against unknown animation names
-    if (name === this.currentState) return; // already playing — do nothing
+    if (!MARTH_ANIMS[name]) return;       // guard: unknown animation name
+    if (name === this.currentState) return; // already playing — preserve continuity
+    // Switching to a new animation always resets (even if done)
     this._startAnimation(name, loop, frameDuration);
   }
 
@@ -261,8 +264,14 @@ class SpriteAnimator {
       this.frameIndex++;
 
       if (this.frameIndex >= frames.length) {
-        // Either loop back to 0, or hold the last frame
-        this.frameIndex = this.loop ? 0 : frames.length - 1;
+        if (this.loop) {
+          // Looping animation: wrap back to start
+          this.frameIndex = 0;
+        } else {
+          // Non-looping animation: hold last frame and mark as done
+          this.frameIndex = frames.length - 1;
+          this.done = true;
+        }
       }
     }
   }
@@ -1662,11 +1671,11 @@ class Fighter {
 
     // ── Sprite animator tick ──────────────────
     if (this.spriteAnim) {
-      const { name, loop, frameDur, force } = getMarthAnim(this);
+      const { name, loop, frameDuration, force } = getMarthAnim(this);
       if (force) {
-        this.spriteAnim.forceSet(name, loop, frameDur);
+        this.spriteAnim.forceSet(name, loop, frameDuration);
       } else {
-        this.spriteAnim.setAnim(name, loop, frameDur);
+        this.spriteAnim.setAnim(name, loop, frameDuration);
       }
       this.spriteAnim.update();
     }
@@ -2168,8 +2177,8 @@ class Fighter {
         ctx.restore();
       }
 
-    } else {
-      // ── Rectangle fallback (non-sprite fighters) ────
+    } else if (!d.sprite) {
+      // ── Rectangle fallback (non-sprite fighters only) ────
       ctx.shadowColor = d.shadowColor;
       ctx.shadowBlur  = this.hitPauseLeft > 0 ? 30 : 16;
 
