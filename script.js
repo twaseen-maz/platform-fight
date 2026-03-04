@@ -1024,500 +1024,259 @@ class Ledge {
 const MOVESETS = {
 
   // ╔═══════════════════════════════════════════════════════╗
-  // ║  BLADE — Balanced Swordfighter                        ║
-  // ║  Philosophy: moderate frame data, disjointed range,   ║
-  // ║  strong edgeguarding, reliable KO options at mid-%.   ║
-  // ║  Frame legend: startup | active | endlag              ║
+  // ║  MARTH — Precision Swordfighter                       ║
+  // ║  Philosophy: disjointed range, tipper sweetspot,      ║
+  // ║  strong edgeguarding, reliable KO at mid-%.           ║
+  // ║  Slower startup than Aeris, stronger KO power.        ║
   // ╚═══════════════════════════════════════════════════════╝
-  BLADE: {
+  MARTH: {
 
-    // ── GROUND MOVES ─────────────────────────────────────
-
-    // Jab — quick two-hit poke. Low commitment, safe on block.
-    // startup 4 | active 3 | endlag 9  → total 16f
     jab: {
       id:'jab', aerial:false,
-      startup:4, active:3, endlag:9, landLag:0,
+      startup:5, active:3, endlag:10, landLag:0,
       damage:5, angle:35, baseKb:20, kbGrowth:70,
-      hitbox:{ ox:16, oy:2, w:44, h:20 }, hurtboxMod:null,
-      sfxColor:'#c8e0ff', locksMovement:false, hitstunMult:0.30,
+      hitbox:{ ox:18, oy:2, w:48, h:20 }, hurtboxMod:null,
+      sfxColor:'#c8a0ff', locksMovement:false, hitstunMult:0.30,
     },
 
-    // ── AERIALS ──────────────────────────────────────────
-
-    // Neutral Air — spinning blade. Multi-directional, safe landing option.
-    // startup 6 | active 10 | endlag 12 | landLag 8
     nair: {
       id:'nair', aerial:true,
-      startup:6, active:10, endlag:12, landLag:8,
-      damage:8, angle:45, baseKb:25, kbGrowth:90,
-      hitbox:{ ox:0, oy:0, w:52, h:52 }, hurtboxMod:null,
-      sfxColor:'#c8e0ff', locksMovement:false, hitstunMult:0.30,
+      startup:7, active:9, endlag:14, landLag:9,
+      damage:9, angle:45, baseKb:26, kbGrowth:92,
+      hitbox:{ ox:0, oy:0, w:54, h:54 }, hurtboxMod:null,
+      sfxColor:'#c8a0ff', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Forward Air — horizontal swipe. Strong edgeguard tool, low endlag.
-    // startup 9 | active 5 | endlag 14 | landLag 10
     fair: {
       id:'fair', aerial:true,
-      startup:9, active:5, endlag:14, landLag:10,
-      damage:12, angle:22, baseKb:30, kbGrowth:100,
-      hitbox:{ ox:18, oy:4, w:50, h:28 }, hurtboxMod:null,
-      sfxColor:'#88ccff', locksMovement:false, hitstunMult:0.30,
+      startup:10, active:5, endlag:15, landLag:11,
+      damage:13, angle:22, baseKb:32, kbGrowth:105,
+      hitbox:{ ox:20, oy:4, w:54, h:28 }, hurtboxMod:null,
+      sfxColor:'#aa88ff', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Back Air — quick reverse slash. Fast, strong, KO potential near ledge.
-    // startup 7 | active 4 | endlag 13 | landLag 9
     bair: {
       id:'bair', aerial:true,
-      startup:7, active:4, endlag:13, landLag:9,
-      damage:13, angle:155, baseKb:32, kbGrowth:105,
-      hitbox:{ ox:-20, oy:2, w:48, h:26 }, hurtboxMod:null,
-      sfxColor:'#aaddff', locksMovement:false, hitstunMult:0.30,
+      startup:8, active:4, endlag:14, landLag:10,
+      damage:14, angle:155, baseKb:34, kbGrowth:108,
+      hitbox:{ ox:-22, oy:2, w:50, h:26 }, hurtboxMod:null,
+      sfxColor:'#aa88ff', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Up Air — upward thrust. Juggle and ceiling KO tool.
-    // startup 8 | active 6 | endlag 12 | landLag 8
     uair: {
       id:'uair', aerial:true,
-      startup:8, active:6, endlag:12, landLag:8,
-      damage:11, angle:84, baseKb:28, kbGrowth:95,
-      hitbox:{ ox:-4, oy:-42, w:46, h:44 }, hurtboxMod:null,
-      sfxColor:'#66ddff', locksMovement:false, hitstunMult:0.30,
+      startup:9, active:6, endlag:13, landLag:9,
+      damage:12, angle:84, baseKb:30, kbGrowth:98,
+      hitbox:{ ox:-4, oy:-44, w:48, h:46 }, hurtboxMod:null,
+      sfxColor:'#8888ff', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Down Air — SPIKE. Downward plunge, stalls then plunges. High risk/reward.
-    // startup 14 | active 6 | endlag 18 | landLag 22
     dair: {
       id:'dair', aerial:true,
-      startup:14, active:6, endlag:18, landLag:22,
-      damage:14, angle:270, baseKb:35, kbGrowth:100,
-      hitbox:{ ox:-4, oy:36, w:44, h:32 }, hurtboxMod:null,
+      startup:15, active:6, endlag:20, landLag:24,
+      damage:15, angle:270, baseKb:36, kbGrowth:102,
+      hitbox:{ ox:-4, oy:38, w:46, h:34 }, hurtboxMod:null,
       sfxColor:'#ff4488', locksMovement:true, hitstunMult:0.30,
     },
 
-    // ── SPECIALS ─────────────────────────────────────────
-
-    // Neutral Special — Blade Beam. Projectile (placeholder hitbox as thrown blade).
-    // startup 18 | active 30 | endlag 20
     neutralSpecial: {
       id:'neutralSpecial', aerial:false,
-      startup:18, active:30, endlag:20, landLag:0,
+      startup:20, active:30, endlag:22, landLag:0,
       damage:7, angle:10, baseKb:28, kbGrowth:85,
-      hitbox:{ ox:30, oy:8, w:36, h:16 }, hurtboxMod:null,
-      sfxColor:'#44ffff', locksMovement:true, hitstunMult:0.60, airOk:true,
+      hitbox:{ ox:32, oy:8, w:36, h:16 }, hurtboxMod:null,
+      sfxColor:'#cc88ff', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
-    // Side Special — Dash Slash. Lunging attack with forward momentum.
-    // startup 10 | active 6 | endlag 16
     sideSpecial: {
       id:'sideSpecial', aerial:false,
-      startup:10, active:6, endlag:16, landLag:12,
-      damage:11, angle:30, baseKb:32, kbGrowth:95,
-      hitbox:{ ox:22, oy:-4, w:52, h:36 }, hurtboxMod:null,
-      sfxColor:'#aaffee', locksMovement:false, hitstunMult:0.60, airOk:true,
+      startup:11, active:6, endlag:18, landLag:14,
+      damage:12, angle:30, baseKb:34, kbGrowth:98,
+      hitbox:{ ox:24, oy:-4, w:56, h:36 }, hurtboxMod:null,
+      sfxColor:'#bb99ff', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
 
-    // Up Special — Rising Blade. Recovery move, vertical launch.
-    // startup 5 | active 8 | endlag 30 (high endlag = punishable off-stage)
     upSpecial: {
       id:'upSpecial', aerial:true,
-      startup:5, active:8, endlag:30, landLag:24,
+      startup:5, active:8, endlag:32, landLag:26,
       damage:9, angle:82, baseKb:30, kbGrowth:90,
-      hitbox:{ ox:-2, oy:-44, w:40, h:48 }, hurtboxMod:null,
+      hitbox:{ ox:-2, oy:-46, w:42, h:50 }, hurtboxMod:null,
       sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.60,
     },
 
-    // Down Special — Counter Stance. Placeholder active window = parry window.
-    // startup 4 | active 20 | endlag 22
     downSpecial: {
       id:'downSpecial', aerial:false,
-      startup:4, active:20, endlag:22, landLag:0,
-      damage:14, angle:60, baseKb:38, kbGrowth:110,
-      hitbox:{ ox:0, oy:0, w:36, h:52 }, hurtboxMod:null,
-      sfxColor:'#ffaaff', locksMovement:true, hitstunMult:0.60, airOk:true,
+      startup:4, active:20, endlag:24, landLag:0,
+      damage:15, angle:60, baseKb:40, kbGrowth:115,
+      hitbox:{ ox:0, oy:0, w:38, h:54 }, hurtboxMod:null,
+      sfxColor:'#cc66ff', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
-    // ── GRAB + THROWS ────────────────────────────────────
-    // Grabs have damage:0, baseKb:0 (engine skips KB for grab moves).
-
-    // Grab — standing grab reach.
-    // startup 7 | active 3 | endlag 14
     grab: {
       id:'grab', aerial:false,
-      startup:7, active:3, endlag:14, landLag:0,
+      startup:8, active:3, endlag:15, landLag:0,
       damage:0, angle:0, baseKb:0, kbGrowth:0,
-      hitbox:{ ox:14, oy:4, w:36, h:24 }, hurtboxMod:null,
+      hitbox:{ ox:16, oy:4, w:38, h:24 }, hurtboxMod:null,
       sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Forward Throw — standard launch.
     fthrow: {
       id:'fthrow', aerial:false,
-      startup:2, active:1, endlag:16, landLag:0,
-      damage:9, angle:30, baseKb:40, kbGrowth:80,
-      hitbox:{ ox:12, oy:4, w:36, h:28 }, hurtboxMod:null,
-      sfxColor:'#88ccff', locksMovement:true, hitstunMult:0.40,
+      startup:2, active:1, endlag:17, landLag:0,
+      damage:9, angle:30, baseKb:42, kbGrowth:82,
+      hitbox:{ ox:14, oy:4, w:36, h:28 }, hurtboxMod:null,
+      sfxColor:'#aa88ff', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Back Throw — strong horizontal KO throw near ledge.
     bthrow: {
       id:'bthrow', aerial:false,
-      startup:3, active:1, endlag:18, landLag:0,
-      damage:11, angle:155, baseKb:45, kbGrowth:90,
-      hitbox:{ ox:-12, oy:4, w:36, h:28 }, hurtboxMod:null,
-      sfxColor:'#aaddff', locksMovement:true, hitstunMult:0.40,
+      startup:3, active:1, endlag:19, landLag:0,
+      damage:12, angle:155, baseKb:48, kbGrowth:92,
+      hitbox:{ ox:-14, oy:4, w:36, h:28 }, hurtboxMod:null,
+      sfxColor:'#aa88ff', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Up Throw — juggle throw, sets up aerial combos.
     uthrow: {
       id:'uthrow', aerial:false,
-      startup:3, active:1, endlag:20, landLag:0,
-      damage:8, angle:90, baseKb:35, kbGrowth:85,
+      startup:3, active:1, endlag:21, landLag:0,
+      damage:8, angle:90, baseKb:36, kbGrowth:86,
       hitbox:{ ox:0, oy:-16, w:36, h:28 }, hurtboxMod:null,
-      sfxColor:'#66ddff', locksMovement:true, hitstunMult:0.40,
+      sfxColor:'#8888ff', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Down Throw — combo throw at low %, tech-chase at high %.
     dthrow: {
       id:'dthrow', aerial:false,
-      startup:2, active:1, endlag:22, landLag:0,
-      damage:7, angle:75, baseKb:25, kbGrowth:70,
+      startup:2, active:1, endlag:23, landLag:0,
+      damage:7, angle:75, baseKb:26, kbGrowth:72,
       hitbox:{ ox:0, oy:20, w:36, h:24 }, hurtboxMod:null,
       sfxColor:'#44ffaa', locksMovement:true, hitstunMult:0.40,
     },
   },
 
   // ╔═══════════════════════════════════════════════════════╗
-  // ║  GRUNT — Heavy Melee Brawler                          ║
-  // ║  Philosophy: slow startup & high endlag on everything,║
-  // ║  massive base knockback, large body + large hitboxes, ║
-  // ║  can KO extremely early. Limited aerial game.         ║
+  // ║  AERIS — Aggressive Combo Swordfighter                ║
+  // ║  Philosophy: fast startup, shorter range than Marth,  ║
+  // ║  combo-heavy aerial game, kills slightly later.       ║
+  // ║  Rewards aggression and read-based play.              ║
   // ╚═══════════════════════════════════════════════════════╝
-  GRUNT: {
+  AERIS: {
 
-    // ── GROUND MOVES ─────────────────────────────────────
-
-    // Jab — haymaker. Slow but hurts even on jab.
-    // startup 9 | active 3 | endlag 16 → total 28f
     jab: {
       id:'jab', aerial:false,
-      startup:9, active:3, endlag:16, landLag:0,
-      damage:8, angle:25, baseKb:28, kbGrowth:80,
-      hitbox:{ ox:16, oy:2, w:40, h:26 }, hurtboxMod:null,
-      sfxColor:'#ff9900', locksMovement:false, hitstunMult:0.30,
+      startup:3, active:4, endlag:8, landLag:0,
+      damage:4, angle:30, baseKb:16, kbGrowth:62,
+      hitbox:{ ox:14, oy:2, w:40, h:20 }, hurtboxMod:null,
+      sfxColor:'#40e0d0', locksMovement:false, hitstunMult:0.30,
     },
 
-    // ── AERIALS ──────────────────────────────────────────
-
-    // Neutral Air — body check. Simple, covers all sides.
-    // startup 12 | active 8 | endlag 20 | landLag 16
     nair: {
       id:'nair', aerial:true,
-      startup:12, active:8, endlag:20, landLag:16,
-      damage:12, angle:40, baseKb:32, kbGrowth:100,
-      hitbox:{ ox:0, oy:0, w:56, h:56 }, hurtboxMod:null,
-      sfxColor:'#ff9900', locksMovement:false, hitstunMult:0.30,
+      startup:5, active:11, endlag:10, landLag:7,
+      damage:7, angle:50, baseKb:22, kbGrowth:82,
+      hitbox:{ ox:0, oy:0, w:50, h:50 }, hurtboxMod:null,
+      sfxColor:'#40e0d0', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Forward Air — hammer fist. Very slow, kills on hit.
-    // startup 18 | active 5 | endlag 22 | landLag 18
     fair: {
       id:'fair', aerial:true,
-      startup:18, active:5, endlag:22, landLag:18,
-      damage:16, angle:25, baseKb:40, kbGrowth:120,
-      hitbox:{ ox:18, oy:6, w:54, h:36 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.30,
+      startup:7, active:6, endlag:12, landLag:8,
+      damage:10, angle:25, baseKb:26, kbGrowth:90,
+      hitbox:{ ox:16, oy:4, w:46, h:28 }, hurtboxMod:null,
+      sfxColor:'#30c8b8', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Back Air — elbow smash. Fastest aerial, still slow overall.
-    // startup 14 | active 5 | endlag 16 | landLag 12
-    bair: {
-      id:'bair', aerial:true,
-      startup:14, active:5, endlag:16, landLag:12,
-      damage:14, angle:150, baseKb:38, kbGrowth:110,
-      hitbox:{ ox:-18, oy:4, w:50, h:32 }, hurtboxMod:null,
-      sfxColor:'#ffaa00', locksMovement:false, hitstunMult:0.30,
-    },
-
-    // Up Air — headbutt upward. Vertical KO near top blast zone.
-    // startup 16 | active 6 | endlag 18 | landLag 14
-    uair: {
-      id:'uair', aerial:true,
-      startup:16, active:6, endlag:18, landLag:14,
-      damage:15, angle:88, baseKb:40, kbGrowth:115,
-      hitbox:{ ox:-4, oy:-44, w:56, h:46 }, hurtboxMod:null,
-      sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.30,
-    },
-
-    // Down Air — SPIKE. Meteor crash — devastating but very slow.
-    // startup 20 | active 6 | endlag 24 | landLag 28
-    dair: {
-      id:'dair', aerial:true,
-      startup:20, active:6, endlag:24, landLag:28,
-      damage:18, angle:270, baseKb:45, kbGrowth:115,
-      hitbox:{ ox:-6, oy:40, w:56, h:36 }, hurtboxMod:null,
-      sfxColor:'#ff2200', locksMovement:true, hitstunMult:0.30,
-    },
-
-    // ── SPECIALS ─────────────────────────────────────────
-
-    // Neutral Special — Ground Slam charge. High damage, high endlag.
-    // startup 24 | active 6 | endlag 30
-    neutralSpecial: {
-      id:'neutralSpecial', aerial:false,
-      startup:24, active:6, endlag:30, landLag:0,
-      damage:20, angle:80, baseKb:48, kbGrowth:130,
-      hitbox:{ ox:-8, oy:20, w:64, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff4400', locksMovement:true, hitstunMult:0.60, airOk:true,
-    },
-
-    // Side Special — Bull Rush. Armoured horizontal charge.
-    // startup 14 | active 12 | endlag 20
-    sideSpecial: {
-      id:'sideSpecial', aerial:false,
-      startup:14, active:12, endlag:20, landLag:16,
-      damage:13, angle:20, baseKb:35, kbGrowth:105,
-      hitbox:{ ox:20, oy:0, w:56, h:48 }, hurtboxMod:null,
-      sfxColor:'#ff8800', locksMovement:false, hitstunMult:0.60, airOk:true,
-    },
-
-    // Up Special — Rocket Jump. Damages below, poor recovery distance.
-    // startup 10 | active 10 | endlag 32
-    upSpecial: {
-      id:'upSpecial', aerial:true,
-      startup:10, active:10, endlag:32, landLag:26,
-      damage:12, angle:270, baseKb:30, kbGrowth:90,
-      hitbox:{ ox:-4, oy:24, w:56, h:40 }, hurtboxMod:null,
-      sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.60,
-    },
-
-    // Down Special — Earthquake. Hits both sides at ground level.
-    // startup 18 | active 14 | endlag 24
-    downSpecial: {
-      id:'downSpecial', aerial:false,
-      startup:18, active:14, endlag:24, landLag:0,
-      damage:15, angle:50, baseKb:40, kbGrowth:110,
-      hitbox:{ ox:-30, oy:24, w:108, h:24 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.60, airOk:true,
-    },
-
-    // ── GRAB + THROWS ────────────────────────────────────
-
-    // Grab — slow but huge reach.
-    // startup 10 | active 4 | endlag 18
-    grab: {
-      id:'grab', aerial:false,
-      startup:10, active:4, endlag:18, landLag:0,
-      damage:0, angle:0, baseKb:0, kbGrowth:0,
-      hitbox:{ ox:14, oy:2, w:44, h:28 }, hurtboxMod:null,
-      sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.40,
-    },
-
-    // Forward Throw — power toss, direct KO threat near ledge.
-    fthrow: {
-      id:'fthrow', aerial:false,
-      startup:3, active:1, endlag:20, landLag:0,
-      damage:13, angle:30, baseKb:50, kbGrowth:90,
-      hitbox:{ ox:14, oy:4, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff9900', locksMovement:true, hitstunMult:0.40,
-    },
-
-    // Back Throw — spinning toss, highest raw throw KB.
-    bthrow: {
-      id:'bthrow', aerial:false,
-      startup:4, active:1, endlag:22, landLag:0,
-      damage:15, angle:160, baseKb:55, kbGrowth:95,
-      hitbox:{ ox:-14, oy:4, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ffaa00', locksMovement:true, hitstunMult:0.40,
-    },
-
-    // Up Throw — catapult into ceiling, combo extension.
-    uthrow: {
-      id:'uthrow', aerial:false,
-      startup:4, active:1, endlag:24, landLag:0,
-      damage:10, angle:90, baseKb:40, kbGrowth:90,
-      hitbox:{ ox:0, oy:-20, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ffcc00', locksMovement:true, hitstunMult:0.40,
-    },
-
-    // Down Throw — pile-driver. Combo starter at low %, kills at very high %.
-    dthrow: {
-      id:'dthrow', aerial:false,
-      startup:4, active:1, endlag:26, landLag:0,
-      damage:12, angle:78, baseKb:30, kbGrowth:75,
-      hitbox:{ ox:0, oy:24, w:44, h:32 }, hurtboxMod:null,
-      sfxColor:'#ff6600', locksMovement:true, hitstunMult:0.40,
-    },
-  },
-
-  // ╔═══════════════════════════════════════════════════════╗
-  // ║  VEX — Lightweight Ranged Zoner                       ║
-  // ║  Philosophy: very fast moves, low knockback,          ║
-  // ║  excellent projectile space control, poor close-range, ║
-  // ║  kills late (110-130%+). Tiny hurtbox. High air speed.║
-  // ╚═══════════════════════════════════════════════════════╝
-  VEX: {
-
-    // ── GROUND MOVES ─────────────────────────────────────
-
-    // Jab — lightning-fast stab. Best OOS option, very low damage.
-    // startup 2 | active 3 | endlag 6 → total 11f
-    jab: {
-      id:'jab', aerial:false,
-      startup:2, active:3, endlag:6, landLag:0,
-      damage:2, angle:20, baseKb:10, kbGrowth:50,
-      hitbox:{ ox:12, oy:6, w:28, h:16 }, hurtboxMod:null,
-      sfxColor:'#aaff88', locksMovement:false, hitstunMult:0.30,
-    },
-
-    // ── AERIALS ──────────────────────────────────────────
-
-    // Neutral Air — spinning burst. Decent coverage, safe on landing.
-    // startup 5 | active 12 | endlag 9 | landLag 6
-    nair: {
-      id:'nair', aerial:true,
-      startup:5, active:12, endlag:9, landLag:6,
-      damage:6, angle:50, baseKb:18, kbGrowth:75,
-      hitbox:{ ox:0, oy:0, w:40, h:40 }, hurtboxMod:null,
-      sfxColor:'#aaff88', locksMovement:false, hitstunMult:0.30,
-    },
-
-    // Forward Air — arcing beam shot. Long active window, chains off zoning.
-    // startup 7 | active 8 | endlag 10 | landLag 7
-    fair: {
-      id:'fair', aerial:true,
-      startup:7, active:8, endlag:10, landLag:7,
-      damage:8, angle:18, baseKb:22, kbGrowth:85,
-      hitbox:{ ox:18, oy:4, w:52, h:22 }, hurtboxMod:null,
-      sfxColor:'#88ff44', locksMovement:false, hitstunMult:0.30,
-    },
-
-    // Back Air — reverse kick. Solid knockback for a zoner, edgeguard tool.
-    // startup 6 | active 5 | endlag 11 | landLag 8
     bair: {
       id:'bair', aerial:true,
       startup:6, active:5, endlag:11, landLag:8,
-      damage:10, angle:160, baseKb:26, kbGrowth:90,
-      hitbox:{ ox:-18, oy:6, w:40, h:24 }, hurtboxMod:null,
-      sfxColor:'#ccff44', locksMovement:false, hitstunMult:0.30,
+      damage:11, angle:158, baseKb:28, kbGrowth:96,
+      hitbox:{ ox:-18, oy:2, w:44, h:26 }, hurtboxMod:null,
+      sfxColor:'#30c8b8', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Up Air — upward energy pulse. Juggle tool, weak but fast.
-    // startup 5 | active 7 | endlag 8 | landLag 5
     uair: {
       id:'uair', aerial:true,
-      startup:5, active:7, endlag:8, landLag:5,
-      damage:7, angle:84, baseKb:20, kbGrowth:80,
-      hitbox:{ ox:-4, oy:-36, w:40, h:36 }, hurtboxMod:null,
-      sfxColor:'#88ffcc', locksMovement:false, hitstunMult:0.30,
+      startup:6, active:7, endlag:10, landLag:7,
+      damage:9, angle:86, baseKb:24, kbGrowth:86,
+      hitbox:{ ox:-4, oy:-40, w:44, h:42 }, hurtboxMod:null,
+      sfxColor:'#20b8a8', locksMovement:false, hitstunMult:0.30,
     },
 
-    // Down Air — SPIKE. Concentrated beam shot downward.
-    // Small hitbox, requires precise aim. Fast startup for a spike.
-    // startup 10 | active 4 | endlag 14 | landLag 16
     dair: {
       id:'dair', aerial:true,
-      startup:10, active:4, endlag:14, landLag:16,
-      damage:11, angle:270, baseKb:28, kbGrowth:90,
-      hitbox:{ ox:-2, oy:30, w:28, h:28 }, hurtboxMod:null,
-      sfxColor:'#44ffcc', locksMovement:true, hitstunMult:0.30,
+      startup:12, active:7, endlag:16, landLag:20,
+      damage:12, angle:270, baseKb:30, kbGrowth:94,
+      hitbox:{ ox:-4, oy:36, w:42, h:32 }, hurtboxMod:null,
+      sfxColor:'#ff4488', locksMovement:true, hitstunMult:0.30,
     },
 
-    // ── SPECIALS ─────────────────────────────────────────
-
-    // Neutral Special — Homing Orb. Slow-moving projectile (large active window).
-    // startup 12 | active 40 | endlag 14
     neutralSpecial: {
       id:'neutralSpecial', aerial:false,
-      startup:12, active:40, endlag:14, landLag:0,
-      damage:6, angle:10, baseKb:22, kbGrowth:80,
-      hitbox:{ ox:28, oy:8, w:24, h:20 }, hurtboxMod:null,
-      sfxColor:'#44ff88', locksMovement:false, hitstunMult:0.60, airOk:true,
+      startup:14, active:28, endlag:16, landLag:0,
+      damage:6, angle:12, baseKb:24, kbGrowth:78,
+      hitbox:{ ox:28, oy:8, w:32, h:16 }, hurtboxMod:null,
+      sfxColor:'#40e0d0', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
-    // Side Special — Dash Burst. Quick teleport-dash with trailing hitbox.
-    // startup 6 | active 4 | endlag 12
     sideSpecial: {
       id:'sideSpecial', aerial:false,
-      startup:6, active:4, endlag:12, landLag:8,
-      damage:7, angle:30, baseKb:24, kbGrowth:85,
-      hitbox:{ ox:16, oy:2, w:44, h:28 }, hurtboxMod:null,
-      sfxColor:'#aaffcc', locksMovement:false, hitstunMult:0.60, airOk:true,
+      startup:8, active:7, endlag:13, landLag:10,
+      damage:10, angle:28, baseKb:28, kbGrowth:88,
+      hitbox:{ ox:20, oy:-2, w:48, h:34 }, hurtboxMod:null,
+      sfxColor:'#30c8b8', locksMovement:false, hitstunMult:0.60, airOk:true,
     },
 
-    // Up Special — Boost Jet. Fast vertical recovery, weak hitbox on ascent.
-    // startup 4 | active 14 | endlag 22
     upSpecial: {
       id:'upSpecial', aerial:true,
-      startup:4, active:14, endlag:22, landLag:14,
-      damage:5, angle:88, baseKb:20, kbGrowth:75,
-      hitbox:{ ox:-2, oy:-36, w:32, h:50 }, hurtboxMod:null,
-      sfxColor:'#ccffaa', locksMovement:true, hitstunMult:0.60,
+      startup:4, active:10, endlag:28, landLag:22,
+      damage:8, angle:84, baseKb:26, kbGrowth:84,
+      hitbox:{ ox:-2, oy:-42, w:38, h:46 }, hurtboxMod:null,
+      sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.60,
     },
 
-    // Down Special — Mine Drop. Deploys stationary hitbox (simulated via long active).
-    // startup 8 | active 50 | endlag 10
     downSpecial: {
       id:'downSpecial', aerial:false,
-      startup:8, active:50, endlag:10, landLag:0,
-      damage:9, angle:55, baseKb:26, kbGrowth:85,
-      hitbox:{ ox:0, oy:28, w:28, h:20 }, hurtboxMod:null,
-      sfxColor:'#ffff44', locksMovement:false, hitstunMult:0.60, airOk:true,
+      startup:3, active:18, endlag:20, landLag:0,
+      damage:12, angle:55, baseKb:34, kbGrowth:102,
+      hitbox:{ ox:0, oy:0, w:34, h:52 }, hurtboxMod:null,
+      sfxColor:'#40e0d0', locksMovement:true, hitstunMult:0.60, airOk:true,
     },
 
-    // ── GRAB + THROWS ────────────────────────────────────
-
-    // Grab — tether-style extended grab. Fast startup, short true active.
-    // startup 5 | active 3 | endlag 12
     grab: {
       id:'grab', aerial:false,
-      startup:5, active:3, endlag:12, landLag:0,
+      startup:6, active:3, endlag:13, landLag:0,
       damage:0, angle:0, baseKb:0, kbGrowth:0,
-      hitbox:{ ox:16, oy:6, w:40, h:20 }, hurtboxMod:null,
+      hitbox:{ ox:14, oy:4, w:34, h:24 }, hurtboxMod:null,
       sfxColor:'#ffffff', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Forward Throw — light toss. Sets up zoning pressure.
     fthrow: {
       id:'fthrow', aerial:false,
-      startup:2, active:1, endlag:14, landLag:0,
-      damage:6, angle:25, baseKb:32, kbGrowth:70,
-      hitbox:{ ox:12, oy:6, w:32, h:24 }, hurtboxMod:null,
-      sfxColor:'#88ff44', locksMovement:true, hitstunMult:0.40,
+      startup:2, active:1, endlag:15, landLag:0,
+      damage:8, angle:28, baseKb:36, kbGrowth:74,
+      hitbox:{ ox:12, oy:4, w:34, h:28 }, hurtboxMod:null,
+      sfxColor:'#40e0d0', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Back Throw — fling away, creates distance for re-zoning.
     bthrow: {
       id:'bthrow', aerial:false,
-      startup:3, active:1, endlag:14, landLag:0,
-      damage:7, angle:160, baseKb:35, kbGrowth:80,
-      hitbox:{ ox:-12, oy:6, w:32, h:24 }, hurtboxMod:null,
-      sfxColor:'#ccff44', locksMovement:true, hitstunMult:0.40,
+      startup:3, active:1, endlag:17, landLag:0,
+      damage:10, angle:158, baseKb:40, kbGrowth:84,
+      hitbox:{ ox:-12, oy:4, w:34, h:28 }, hurtboxMod:null,
+      sfxColor:'#30c8b8', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Up Throw — high-angle toss. Best throw for landing aerials.
     uthrow: {
       id:'uthrow', aerial:false,
-      startup:3, active:1, endlag:16, landLag:0,
-      damage:5, angle:88, baseKb:28, kbGrowth:75,
-      hitbox:{ ox:0, oy:-14, w:32, h:24 }, hurtboxMod:null,
-      sfxColor:'#aaffcc', locksMovement:true, hitstunMult:0.40,
+      startup:3, active:1, endlag:18, landLag:0,
+      damage:7, angle:90, baseKb:30, kbGrowth:78,
+      hitbox:{ ox:0, oy:-14, w:34, h:26 }, hurtboxMod:null,
+      sfxColor:'#20b8a8', locksMovement:true, hitstunMult:0.40,
     },
-
-    // Down Throw — bounces opponent, low angle, combo launcher.
     dthrow: {
       id:'dthrow', aerial:false,
-      startup:2, active:1, endlag:18, landLag:0,
-      damage:4, angle:68, baseKb:18, kbGrowth:65,
-      hitbox:{ ox:0, oy:20, w:32, h:20 }, hurtboxMod:null,
-      sfxColor:'#88ffcc', locksMovement:true, hitstunMult:0.40,
+      startup:2, active:1, endlag:20, landLag:0,
+      damage:6, angle:72, baseKb:22, kbGrowth:64,
+      hitbox:{ ox:0, oy:18, w:34, h:22 }, hurtboxMod:null,
+      sfxColor:'#44ffaa', locksMovement:true, hitstunMult:0.40,
     },
   },
 };
 // ═══════════════════════════════════════════════════════════
 const FIGHTER_DEFS = {
-  MARTH: Object.assign({}, MARTH_DEF_ENTRY, { moveset: MOVESETS.BLADE }),
-  AERIS: Object.assign({}, AERIS_DEF_ENTRY, { moveset: MOVESETS.BLADE }),
+  MARTH: Object.assign({}, MARTH_DEF_ENTRY, { moveset: MOVESETS.MARTH }),
+  AERIS: Object.assign({}, AERIS_DEF_ENTRY, { moveset: MOVESETS.AERIS }),
 };
 
 
@@ -4012,6 +3771,8 @@ function loop(timestamp) {
 
   SM.update(rawDt);   // runs all physics ticks (may be multiple per frame)
   clearJust();        // clear justPressed ONCE after all ticks — never drops inputs mid-batch
+  // Always clear game canvas — non-game scenes leave it blank intentionally
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   SM.render();
 }
 
