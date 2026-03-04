@@ -27,50 +27,56 @@ const CHARACTERS = [
     id: 'aeris',
     name: 'Aeris',
     class: 'Blade Wanderer',
-    spriteSheets: {
-      // Original sprite sheets — grey bg removed at load time via removeBackground()
-      idle: 'Aeris_png_Idle.png',
-      run:  'Aeris_png_run.png',
-      jump: 'Aeris_png_jump_.png',
-    },
+    // Each animation lists individual pre-cropped, transparent PNG frames.
+    // This avoids all sprite-sheet coordinate math (no frameW/sheetY bugs).
     animations: {
-      // Values measured directly from each sheet's pixel content.
-      // Sheets are pre-processed PNGs with background already removed (transparent).
-      // sheetY = first row of sprite content; frameH = height of sprite strip.
-      idle: { frameCount: 12, frameRate:  8, loop: true,  frameW: 128, frameH: 508, sheetY: 49  },
-      run:  { frameCount:  8, frameRate: 12, loop: true,  frameW: 192, frameH: 628, sheetY: 49  },
-      jump: { frameCount:  9, frameRate: 10, loop: false, frameW: 170, frameH: 722, sheetY: 38  },
+      idle: {
+        frames: Array.from({length: 12}, (_, i) => `aeris_idle/aeris_idle_${String(i).padStart(2,'0')}.png`),
+        frameRate: 8, loop: true,
+      },
+      run: {
+        frames: Array.from({length: 8},  (_, i) => `aeris_run/aeris_run_${String(i).padStart(2,'0')}.png`),
+        frameRate: 12, loop: true,
+      },
+      jump: {
+        frames: Array.from({length: 9},  (_, i) => `aeris_jump/aeris_jump_${String(i).padStart(2,'0')}.png`),
+        frameRate: 10, loop: false,
+      },
     },
-    // targetHeight: the desired on-screen pixel height of Aeris.
-    // Scale is computed per-draw as targetHeight / frameH, so all
-    // animations render at the same size regardless of sheet dimensions.
+    // Aeris renders at this height in game pixels; scale is derived per-frame
+    // so she stays the same size regardless of individual frame dimensions.
     targetHeight: 160,
-    feetOffsetY: 0.88,
+    feetOffsetY:  0.88,
   },
 ];
 
 /* ============================================================
    ANIMATION CLASS
-   Manages sprite-sheet frame cycling with deltaTime.
+   Frame-array based: each frame is a separate pre-cropped Image.
+   No sprite-sheet coordinate math — eliminates sheetY/frameW bugs entirely.
    ============================================================ */
 class Animation {
   /**
-   * @param {HTMLImageElement} image  - The loaded sprite sheet
-   * @param {object} config           - { frameCount, frameRate, loop, frameW, frameH, sheetY }
+   * @param {HTMLImageElement[]} images  - Array of per-frame images (already loaded)
+   * @param {object} config              - { frameRate, loop }
    */
-  constructor(image, config) {
-    this.image      = image;
-    this.frameCount = config.frameCount;
-    this.frameRate  = config.frameRate;   // frames per second
-    this.loop       = config.loop;
-    this.frameW     = config.frameW;
-    this.frameH     = config.frameH;
-    this.sheetY     = config.sheetY || 0; // y offset in pixels into the sheet
+  constructor(images, config) {
+    this.images       = images;         // one Image per frame
+    this.frameCount   = images.length;
+    this.frameRate    = config.frameRate;
+    this.loop         = config.loop;
 
     this.currentFrame = 0;
     this.elapsed      = 0;
     this.finished     = false;
   }
+
+  /** Convenience: current frame image */
+  get image() { return this.images[this.currentFrame]; }
+
+  /** Width/height of the current frame image */
+  get frameW() { return this.images[this.currentFrame].naturalWidth  || this.images[this.currentFrame].width; }
+  get frameH() { return this.images[this.currentFrame].naturalHeight || this.images[this.currentFrame].height; }
 
   /** Advance animation by deltaTime seconds */
   update(dt) {
@@ -87,7 +93,6 @@ class Animation {
         if (this.loop) {
           this.currentFrame = 0;
         } else {
-          // Stop on last frame
           this.currentFrame = this.frameCount - 1;
           this.finished = true;
           break;
@@ -106,111 +111,67 @@ class Animation {
   /**
    * Draw the current frame onto a canvas context.
    * @param {CanvasRenderingContext2D} ctx
-   * @param {number} x         - destination centre-x
-   * @param {number} y         - destination bottom-y (feet)
-   * @param {number} scale     - render scale
-   * @param {boolean} flipX    - mirror horizontally
-   * @param {number} feetOffY  - 0..1, fraction down the frame that is "feet"
+   * @param {number} x        - destination centre-x
+   * @param {number} y        - destination feet-y
+   * @param {number} scale    - pixels-per-source-pixel
+   * @param {boolean} flipX   - mirror horizontally
+   * @param {number} feetOffY - fraction of frame height above feet anchor
    */
-  draw(ctx, x, y, scale, flipX, feetOffY = 0.9) {
-    const dw = this.frameW * scale;
-    const dh = this.frameH * scale;
-    const dx = x - dw / 2;
-    // dy: top-left corner so that (feetOffY * dh) is at y
-    const dy = y - dh * feetOffY;
+  draw(ctx, x, y, scale, flipX, feetOffY = 0.88) {
+    const img = this.images[this.currentFrame];
+    const sw  = img.naturalWidth  || img.width;
+    const sh  = img.naturalHeight || img.height;
+    const dw  = Math.round(sw * scale);
+    const dh  = Math.round(sh * scale);
+    const dx  = Math.round(x - dw / 2);
+    const dy  = Math.round(y - dh * feetOffY);
 
     ctx.save();
     if (flipX) {
-      // Mirror around the character centre x
       ctx.translate(x, 0);
       ctx.scale(-1, 1);
       ctx.translate(-x, 0);
     }
-    // 9-arg drawImage: read exactly one frame column from the correct strip row
-    ctx.drawImage(
-      this.image,
-      this.currentFrame * this.frameW,  // sx: frame column
-      this.sheetY,                       // sy: vertical offset into sheet for this strip
-      this.frameW,                       // sw: one frame wide
-      this.frameH,                       // sh: one frame tall
-      Math.round(dx),                    // dx
-      Math.round(dy),                    // dy
-      Math.round(dw),                    // dw
-      Math.round(dh)                     // dh
-    );
+    // Simple full-image draw — no sheet coordinate math needed
+    ctx.drawImage(img, 0, 0, sw, sh, dx, dy, dw, dh);
     ctx.restore();
   }
 }
 
 /* ============================================================
-   SPRITE LOADER + BACKGROUND REMOVER
-   Loads a sprite sheet, strips the grey checkerboard background
-   by color-keying corner samples, then returns a cleaned
-   HTMLImageElement backed by an offscreen canvas.
+   IMAGE LOADER
+   Loads a single PNG and returns a Promise<HTMLImageElement>.
    ============================================================ */
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload = () => {
-      try {
-        const cleaned = removeBackground(img);
-        resolve(cleaned);
-      } catch (e) {
-        // If removal fails for any reason, fall back to original
-        console.warn('BG removal failed for', src, e);
-        resolve(img);
-      }
-    };
+    img.onload  = () => resolve(img);
     img.onerror = () => reject(new Error(`Failed to load: ${src}`));
     img.src = src;
   });
 }
 
 /**
- * Removes the background from a sprite sheet at load time.
- * Detects whether the sheet has a black bg (idle) or grey bg (run/jump)
- * by sampling the corner pixels, then zeros out any pixel within
- * `tolerance` of that colour.
- * Returns an HTMLCanvasElement usable as a drawImage source.
+ * Loads all frame images for one animation definition.
+ * @param {object} animDef  - { frames: string[], frameRate, loop }
+ * @returns {Promise<Animation>}
  */
-function removeBackground(img, tolerance = 30) {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
+async function loadAnimation(animDef) {
+  const images = await Promise.all(animDef.frames.map(loadImage));
+  return new Animation(images, animDef);
+}
 
-  const tmp = document.createElement('canvas');
-  tmp.width = w; tmp.height = h;
-  const tctx = tmp.getContext('2d');
-  tctx.drawImage(img, 0, 0);
-  const data = tctx.getImageData(0, 0, w, h);
-  const px = data.data;
-
-  // Sample all four corners and average them to get background colour
-  function sampleRGB(x, y) {
-    const i = (y * w + x) * 4;
-    return [px[i], px[i+1], px[i+2]];
+/**
+ * Loads all animations for a character definition.
+ * @param {object} charDef  - entry from CHARACTERS
+ * @returns {Promise<object>}  { idle: Animation, run: Animation, jump: Animation }
+ */
+async function loadCharacterAnimations(charDef) {
+  const result = {};
+  for (const [key, animDef] of Object.entries(charDef.animations)) {
+    result[key] = await loadAnimation(animDef);
   }
-  const corners = [sampleRGB(0,0), sampleRGB(w-1,0), sampleRGB(0,h-1), sampleRGB(w-1,h-1)];
-  const bg = [
-    corners.reduce((s,c) => s+c[0], 0) / 4,
-    corners.reduce((s,c) => s+c[1], 0) / 4,
-    corners.reduce((s,c) => s+c[2], 0) / 4,
-  ];
-
-  for (let i = 0; i < px.length; i += 4) {
-    const dr = Math.abs(px[i]   - bg[0]);
-    const dg = Math.abs(px[i+1] - bg[1]);
-    const db = Math.abs(px[i+2] - bg[2]);
-    if (Math.max(dr, dg, db) < tolerance) {
-      px[i+3] = 0;
-    }
-  }
-
-  const out = document.createElement('canvas');
-  out.width = w; out.height = h;
-  out.naturalWidth  = w;
-  out.naturalHeight = h;
-  out.getContext('2d').putImageData(data, 0, 0);
-  return out;
+  return result;
 }
 
 /* ============================================================
@@ -234,12 +195,8 @@ class Player {
     this.onGround   = false;
     this.facingRight = true;
 
-    // Build animation instances for each state
-    this.animations = {};
-    for (const [key, cfg] of Object.entries(charDef.animations)) {
-      this.animations[key] = new Animation(images[key], cfg);
-    }
-
+    // animations is already a { idle, run, jump } map of Animation instances
+    this.animations  = images;  // renamed parameter, contains Animation objects
     this.currentAnim = 'idle';
     this.animations.idle.reset();
 
@@ -276,8 +233,7 @@ class Player {
     if (input.jumpPressed && this.onGround) {
       this.vy = JUMP_FORCE;
       this.onGround = false;
-      // Reset the jump animation immediately so it plays from frame 0
-      // every time we leave the ground, even if it finished last time.
+      // Reset jump anim so it always plays from frame 0 on each new jump
       this.animations.jump.reset();
     }
     input.jumpPressed = false; // Consume the press
@@ -320,7 +276,7 @@ class Player {
   /** Render the current animation frame */
   draw(ctx) {
     const anim  = this.animations[this.currentAnim];
-    // Derive scale from a fixed target height so all animations stay the same size
+    // Compute scale from targetHeight so all frames render at the same size
     const scale = this.charDef.targetHeight / anim.frameH;
     const flip  = !this.facingRight;
     anim.draw(ctx, this.x, this.y, scale, flip, this.charDef.feetOffsetY);
@@ -652,9 +608,8 @@ class CharacterSelectScreen {
       card.appendChild(info);
       this.container.appendChild(card);
 
-      // Load idle sprite for preview
-      loadImage(char.spriteSheets.idle).then(img => {
-        const anim = new Animation(img, char.animations.idle);
+      // Load idle animation frames for preview
+      loadAnimation(char.animations.idle).then(anim => {
         this._previewAnims[char.id] = {
           anim,
           canvas: cvs,
@@ -679,32 +634,15 @@ class CharacterSelectScreen {
         anim.update(dt);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Scale so the character renders at a consistent size in the card,
-        // using the same targetHeight logic as the game so it matches in-game size.
-        const targetH = canvas.height * 0.80;
-        const scale   = targetH / anim.frameH;
-        const dw = anim.frameW * scale;
-        const dh = anim.frameH * scale;
-        const dx = (canvas.width - dw) / 2;
-        const dy = canvas.height - dh - 10;
+        // Scale to fill card consistently
+        const scale = (canvas.height * 0.82) / anim.frameH;
+        const dw    = anim.frameW * scale;
+        const dh    = anim.frameH * scale;
+        const dx    = (canvas.width - dw) / 2;
+        const dy    = canvas.height - dh - 8;
 
-        // Clip to canvas bounds so no adjacent frame columns bleed in
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, canvas.width, canvas.height);
-        ctx.clip();
-
-        // Explicitly draw only the current frame column from the sheet
-        ctx.drawImage(
-          anim.image,
-          anim.currentFrame * anim.frameW,  // src x: correct frame column
-          anim.sheetY,                       // src y
-          anim.frameW,                       // src w (one frame only)
-          anim.frameH,                       // src h
-          dx, dy, dw, dh                     // destination
-        );
-
-        ctx.restore();
+        // Draw the current frame image directly — no sheet math needed
+        ctx.drawImage(anim.image, dx, dy, dw, dh);
       }
     };
     this._rafId = requestAnimationFrame(loop);
@@ -744,14 +682,10 @@ class CharacterSelectScreen {
     /* Transition out */
     selectScreen.classList.add('fade-out');
 
-    /* Load all sprite sheets for chosen character */
-    let images;
+    /* Load all animation frames for chosen character */
+    let animations;
     try {
-      images = {
-        idle: await loadImage(charDef.spriteSheets.idle),
-        run:  await loadImage(charDef.spriteSheets.run),
-        jump: await loadImage(charDef.spriteSheets.jump),
-      };
+      animations = await loadCharacterAnimations(charDef);
     } catch (err) {
       console.error('Failed to load sprites:', err);
       selectScreen.classList.remove('fade-out');
@@ -762,7 +696,7 @@ class CharacterSelectScreen {
     const stage = new Stage(CANVAS_W, CANVAS_H);
     const startX = CANVAS_W / 2;
     const startY = stage.platformY;
-    const player = new Player(charDef, images, startX, startY);
+    const player = new Player(charDef, animations, startX, startY);
 
     /* Show game screen */
     setTimeout(() => {
