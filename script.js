@@ -609,7 +609,7 @@ const AERIS_DEF_ENTRY = {
   maxJumps: 2,
   sprite:       true,
   spriteSheet:  'AERIS',       // key used by Fighter.draw() to pick the right sheet
-  spriteScale:  2.0,           // scale 2 gives ~120px body height on 540px canvas
+  spriteScale:  0.45,          // 140×185 cells × 0.45 ≈ 63×83px — fits 540px canvas
   spriteOffsetX: 0,
   spriteOffsetY: 2,
   animFn:       'AERIS',       // key into ANIM_FN_MAP
@@ -2361,6 +2361,7 @@ const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
 canvas.width  = stage.width;
 canvas.height = stage.height;
+ctx.imageSmoothingEnabled = false;
 document.getElementById('canvas-wrap').style.width  = stage.width  + 'px';
 document.getElementById('canvas-wrap').style.height = stage.height + 'px';
 
