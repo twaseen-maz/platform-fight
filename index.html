@@ -1,114 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PLATFORM FIGHTER — ENGINE v0.5</title>
-
-  <!--
-    All styles live in style.css — no inline styles anywhere.
-    Includes pixel-art rendering rules, transparent sprite backgrounds,
-    and absolute positioning for sprite entities.
-  -->
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aeris — Fighter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
-<div id="app">
+  <!-- ===================== CHARACTER SELECT SCREEN ===================== -->
+  <div id="select-screen">
 
-  <!-- Title drawn on canvas by MainMenuScene — DOM element hidden via CSS -->
-  <header>
-    <h1>PLATFORM FIGHTER</h1>
-    <div class="version">ENGINE v0.5 — SCENE MANAGER / UI</div>
-  </header>
+    <div class="select-bg-overlay"></div>
 
-  <!-- Game canvas -->
-  <div id="canvas-wrap">
-    <canvas id="canvas"></canvas>
-  </div>
-
-  <!-- Full-screen UI overlay for menus and canvas-drawn HUD -->
-  <canvas id="ui-canvas"></canvas>
-
-  <!--
-    DOM HUD — hidden by CSS (#hud { display: none !important }).
-    All in-game HUD is drawn directly on the canvas.
-    Kept in HTML for potential future re-activation.
-  -->
-  <div id="hud">
-    <div class="fighter-panel p1">
-      <div class="name">MARTH</div>
-      <div class="dmg-counter" id="p1-dmg">0%</div>
-      <div class="stat-row">STATE  <span class="stat-val" id="p1-state">IDLE</span></div>
-      <div class="stat-row">MOVE   <span class="stat-val" id="p1-move">—</span></div>
-      <div class="stat-row">FRAME  <span class="stat-val" id="p1-frame">—</span></div>
-      <div class="stat-row">STUN   <span class="stat-val" id="p1-stun">—</span></div>
-      <div class="stat-row">JUMPS  <span class="stat-val" id="p1-jumps">2</span></div>
-      <div class="stat-row">SHIELD <span class="stat-val" id="p1-shield">100</span><span class="ledge-dot" id="p1-ledge"></span></div>
-      <div class="phase-bar"><div class="phase-fill" id="p1-phase"></div></div>
-      <div class="stun-bar"><div class="stun-fill" id="p1-stun-bar"></div></div>
-      <div class="shield-bar"><div class="shield-fill" id="p1-shield-bar"></div></div>
-    </div>
-
-    <div class="controls-panel">
-      <h2>CONTROLS</h2>
-      <div class="key-grid">
-        <div><span class="key">A / D</span> Move P1</div>
-        <div><span class="key">← / →</span> Move P2</div>
-        <div><span class="key">W</span> Jump P1</div>
-        <div><span class="key">↑</span> Jump P2</div>
-        <div><span class="key">S</span> Fast Fall P1</div>
-        <div><span class="key">↓</span> Fast Fall P2</div>
-        <div><span class="key">J</span> Normal P1</div>
-        <div><span class="key">Num1</span> Normal P2</div>
-        <div><span class="key">K</span> Special P1</div>
-        <div><span class="key">Num2</span> Special P2</div>
-        <div><span class="key">L</span> Grab P1</div>
-        <div><span class="key">Num3</span> Grab P2</div>
-        <div><span class="key">F</span> Shield P1</div>
-        <div><span class="key">Num5</span> Shield P2</div>
-        <div><span class="key">G</span> Dodge P1</div>
-        <div><span class="key">Num6</span> Dodge P2</div>
+    <div class="select-content">
+      <div class="select-title">
+        <span class="title-line">CHOOSE YOUR</span>
+        <span class="title-name">FIGHTER</span>
       </div>
-      <div class="controls-legend">
-        <div>NORMAL: ground=Jab / dir+ground=Smash</div>
-        <div>NORMAL air: dir=aerial / neutral=Nair</div>
-        <div>SPECIAL+dir: ↑Up ↓Down ←→Side / Neutral</div>
+
+      <div class="card-grid" id="card-grid">
+        <!-- Character cards injected by JS -->
       </div>
+
+      <div class="select-hint">Click a fighter to begin</div>
     </div>
 
-    <div class="fighter-panel p2">
-      <div class="name">MARTH</div>
-      <div class="dmg-counter" id="p2-dmg">0%</div>
-      <div class="stat-row">STATE  <span class="stat-val" id="p2-state">IDLE</span></div>
-      <div class="stat-row">MOVE   <span class="stat-val" id="p2-move">—</span></div>
-      <div class="stat-row">FRAME  <span class="stat-val" id="p2-frame">—</span></div>
-      <div class="stat-row">STUN   <span class="stat-val" id="p2-stun">—</span></div>
-      <div class="stat-row">JUMPS  <span class="stat-val" id="p2-jumps">2</span></div>
-      <div class="stat-row">SHIELD <span class="stat-val" id="p2-shield">100</span><span class="ledge-dot" id="p2-ledge"></span></div>
-      <div class="phase-bar"><div class="phase-fill" id="p2-phase"></div></div>
-      <div class="stun-bar"><div class="stun-fill" id="p2-stun-bar"></div></div>
-      <div class="shield-bar"><div class="shield-fill" id="p2-shield-bar"></div></div>
+  </div>
+
+  <!-- ===================== GAME SCREEN ===================== -->
+  <div id="game-screen" class="hidden">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="controls-hint">
+      <span>← → Move</span>
+      <span>Space / ↑ Jump</span>
     </div>
   </div>
 
-  <!-- Debug bar — hidden by CSS, kept for dev re-activation -->
-  <div id="debug-bar">
-    <div>FPS: <span id="fps">60</span></div>
-    <div>TICK: <span id="tick">0</span></div>
-    <div>HITS: <span id="hits">0</span></div>
-    <div>PAUSE: <span id="hitpause">0</span></div>
-    <div>DEBUG: <span id="debug-mode">OFF</span> <span>(Tab)</span></div>
-  </div>
-
-</div><!-- /#app -->
-
-<!--
-  All game logic lives in script.js.
-  Loaded at the bottom of body so the DOM is ready before the script runs.
-  Contains: sprite animation engine, fighter physics, stage, scenes, rAF loop.
--->
-<script src="script.js"></script>
-
+  <script src="game.js"></script>
 </body>
 </html>

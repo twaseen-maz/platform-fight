@@ -1,0 +1,323 @@
+/* =========================================================
+   BASE RESET & FONTS
+   ========================================================= */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --gold:       #c9a84c;
+  --gold-light: #f0d080;
+  --deep:       #0a0a12;
+  --panel:      rgba(8, 8, 18, 0.88);
+  --border:     rgba(201, 168, 76, 0.35);
+  --text-dim:   rgba(240, 208, 128, 0.45);
+  --card-w:     220px;
+  --card-h:     300px;
+  --radius:     6px;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--deep);
+  font-family: 'Crimson Pro', Georgia, serif;
+  color: var(--gold-light);
+}
+
+.hidden { display: none !important; }
+
+/* =========================================================
+   SELECT SCREEN
+   ========================================================= */
+#select-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  /* Dramatic diagonal background */
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 30%, rgba(90, 60, 10, 0.25) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 80% at 20% 80%, rgba(20, 10, 60, 0.5) 0%, transparent 60%),
+    linear-gradient(165deg, #0a0a18 0%, #07080f 40%, #0c0a1a 100%);
+}
+
+/* Animated scanline overlay */
+.select-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0,0,0,0.07) 3px,
+    rgba(0,0,0,0.07) 4px
+  );
+  pointer-events: none;
+  animation: scanPan 20s linear infinite;
+}
+
+@keyframes scanPan {
+  from { background-position: 0 0; }
+  to   { background-position: 0 400px; }
+}
+
+.select-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  z-index: 1;
+}
+
+/* Title */
+.select-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  animation: fadeDown 0.8s ease both;
+}
+
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.title-line {
+  font-family: 'Crimson Pro', serif;
+  font-weight: 300;
+  font-style: italic;
+  font-size: 1rem;
+  letter-spacing: 0.45em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.title-name {
+  font-family: 'Cinzel Decorative', serif;
+  font-weight: 900;
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  letter-spacing: 0.12em;
+  color: var(--gold-light);
+  text-shadow:
+    0 0 30px rgba(201,168,76,0.5),
+    0 0 80px rgba(201,168,76,0.15);
+}
+
+/* Card grid */
+.card-grid {
+  display: flex;
+  gap: 36px;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation: fadeUp 0.9s 0.15s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Individual character card */
+.char-card {
+  width: var(--card-w);
+  height: var(--card-h);
+  cursor: pointer;
+  position: relative;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 24px;
+}
+
+.char-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 40%,
+    rgba(4, 3, 14, 0.92) 100%
+  );
+  z-index: 1;
+}
+
+/* Animated shimmer on hover */
+.char-card::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  left: -60%;
+  width: 40%;
+  height: 220%;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255,220,120,0.12) 50%,
+    transparent 60%
+  );
+  transform: rotate(20deg);
+  transition: left 0.5s ease, top 0.5s ease;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.char-card:hover::after {
+  left: 130%;
+  top: -60%;
+}
+
+.char-card:hover {
+  transform: translateY(-8px) scale(1.03);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.7),
+    0 0 0 1px rgba(201,168,76,0.6),
+    0 0 30px rgba(201,168,76,0.12);
+  border-color: var(--gold);
+}
+
+.char-card:active {
+  transform: translateY(-4px) scale(1.01);
+}
+
+/* Portrait area inside card */
+.card-portrait {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.card-portrait canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* Name & class text */
+.card-info {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+}
+
+.card-name {
+  font-family: 'Cinzel Decorative', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--gold-light);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+}
+
+.card-class {
+  font-family: 'Crimson Pro', serif;
+  font-style: italic;
+  font-size: 0.82rem;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+/* Locked card variant */
+.char-card.locked {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.7);
+}
+
+.char-card.locked:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border);
+}
+
+/* Select hint */
+.select-hint {
+  font-family: 'Crimson Pro', serif;
+  font-style: italic;
+  font-size: 0.85rem;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+  animation: pulse 2.5s ease-in-out infinite, fadeUp 1s 0.4s ease both;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 0.9; }
+}
+
+/* =========================================================
+   GAME SCREEN
+   ========================================================= */
+#game-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+#gameCanvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  /* Canvas size set by JS */
+}
+
+/* Controls hint overlay */
+#controls-hint {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 28px;
+  font-family: 'Crimson Pro', serif;
+  font-style: italic;
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.3);
+  pointer-events: none;
+  animation: fadeIn 1s 0.5s ease both;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Screen transition */
+#select-screen, #game-screen {
+  transition: opacity 0.55s ease;
+}
+
+#select-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#game-screen.fade-in {
+  animation: screenIn 0.6s ease both;
+}
+
+@keyframes screenIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
