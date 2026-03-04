@@ -28,20 +28,21 @@ const CHARACTERS = [
     name: 'Aeris',
     class: 'Blade Wanderer',
     spriteSheets: {
+      // Original sprite sheets — grey bg removed at load time via removeBackground()
       idle: 'Aeris_png_Idle.png',
       run:  'Aeris_png_run.png',
       jump: 'Aeris_png_jump_.png',
     },
     animations: {
-      // name: { row: Y offset in sheet, frameCount, frameRate, loop, frameW, frameH, sheetY }
-      idle: { frameCount: 12, frameRate: 10, loop: true,  frameW: 128, frameH: 1024, sheetY: 0 },
-      run:  { frameCount:  8, frameRate: 12, loop: true,  frameW: 192, frameH: 1024, sheetY: 0 },
-      jump: { frameCount:  9, frameRate: 10, loop: false, frameW: 171, frameH: 1024, sheetY: 0 },
+      // sheetY / frameH measured from the run sheet (all 3 sheets share the same layout).
+      // The sprite strip occupies rows 49-676 of the 1024px tall sheet.
+      // removeBackground() makes the grey bg transparent at load time.
+      idle: { frameCount: 12, frameRate:  8, loop: true,  frameW: 128, frameH: 628, sheetY: 49 },
+      run:  { frameCount:  8, frameRate: 12, loop: true,  frameW: 192, frameH: 628, sheetY: 49 },
+      jump: { frameCount:  9, frameRate: 10, loop: false, frameW: 170, frameH: 628, sheetY: 49 },
     },
-    // Displayed scale on canvas (sprite sheets are large)
-    displayScale: 0.12,
-    // Pixel offset to align feet with collision bottom
-    feetOffsetY: 0.78,
+    displayScale: 0.26,
+    feetOffsetY: 0.92,
   },
 ];
 
@@ -108,41 +109,115 @@ class Animation {
    * @param {boolean} flipX    - mirror horizontally
    * @param {number} feetOffY  - 0..1, fraction down the frame that is "feet"
    */
-  draw(ctx, x, y, scale, flipX, feetOffY = 0.78) {
+  draw(ctx, x, y, scale, flipX, feetOffY = 0.9) {
     const dw = this.frameW * scale;
     const dh = this.frameH * scale;
     const dx = x - dw / 2;
+    // dy: top-left corner so that (feetOffY * dh) is at y
     const dy = y - dh * feetOffY;
 
     ctx.save();
     if (flipX) {
+      // Mirror around the character centre x
       ctx.translate(x, 0);
       ctx.scale(-1, 1);
       ctx.translate(-x, 0);
     }
+    // 9-arg drawImage: read exactly one frame column from the correct strip row
     ctx.drawImage(
       this.image,
-      this.currentFrame * this.frameW,  // source x
-      this.sheetY,                       // source y
-      this.frameW,                       // source w
-      this.frameH,                       // source h
-      dx, dy, dw, dh                     // destination
+      this.currentFrame * this.frameW,  // sx: frame column
+      this.sheetY,                       // sy: vertical offset into sheet for this strip
+      this.frameW,                       // sw: one frame wide
+      this.frameH,                       // sh: one frame tall
+      Math.round(dx),                    // dx
+      Math.round(dy),                    // dy
+      Math.round(dw),                    // dw
+      Math.round(dh)                     // dh
     );
     ctx.restore();
   }
 }
 
 /* ============================================================
-   SPRITE LOADER
-   Returns a Promise that resolves to an HTMLImageElement.
+   SPRITE LOADER + BACKGROUND REMOVER
+   Loads a sprite sheet, strips the grey checkerboard background
+   by color-keying corner samples, then returns a cleaned
+   HTMLImageElement backed by an offscreen canvas.
    ============================================================ */
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.onload  = () => resolve(img);
+    img.onload = () => {
+      try {
+        const cleaned = removeBackground(img);
+        resolve(cleaned);
+      } catch (e) {
+        // If removal fails for any reason, fall back to original
+        console.warn('BG removal failed for', src, e);
+        resolve(img);
+      }
+    };
     img.onerror = () => reject(new Error(`Failed to load: ${src}`));
     img.src = src;
   });
+}
+
+/**
+ * Removes the solid grey background from a sprite sheet image.
+ * Samples the four corners to detect the background colour,
+ * then makes all pixels within `tolerance` of that colour transparent.
+ * Returns a new HTMLImageElement whose src is an offscreen canvas data-URL,
+ * also exposes .naturalWidth / .naturalHeight correctly.
+ *
+ * @param {HTMLImageElement} img
+ * @param {number} tolerance  - max per-channel delta to count as background
+ * @returns {HTMLCanvasElement}  - usable as an image source in drawImage
+ */
+function removeBackground(img, tolerance = 28) {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+
+  // Draw original onto a temp canvas to read pixels
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(img, 0, 0);
+  const data = tctx.getImageData(0, 0, w, h);
+  const px = data.data;
+
+  // Sample background colour from the four corners (average)
+  function sample(x, y) {
+    const i = (y * w + x) * 4;
+    return [px[i], px[i+1], px[i+2]];
+  }
+  const corners = [sample(0,0), sample(w-1,0), sample(0,h-1), sample(w-1,h-1)];
+  const bg = [
+    corners.reduce((s,c) => s+c[0], 0) / 4,
+    corners.reduce((s,c) => s+c[1], 0) / 4,
+    corners.reduce((s,c) => s+c[2], 0) / 4,
+  ];
+
+  // Zero out alpha for all pixels close to the background colour
+  for (let i = 0; i < px.length; i += 4) {
+    const dr = Math.abs(px[i]   - bg[0]);
+    const dg = Math.abs(px[i+1] - bg[1]);
+    const db = Math.abs(px[i+2] - bg[2]);
+    if (Math.max(dr, dg, db) < tolerance) {
+      px[i+3] = 0;  // fully transparent
+    }
+  }
+
+  // Write cleaned pixels onto an output canvas (this is what drawImage will use)
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const octx = out.getContext('2d');
+  octx.putImageData(data, 0, 0);
+
+  // Mirror .naturalWidth / .naturalHeight so Animation can read them
+  out.naturalWidth  = w;
+  out.naturalHeight = h;
+  return out;
 }
 
 /* ============================================================
@@ -603,20 +678,34 @@ class CharacterSelectScreen {
       last = ts;
 
       for (const entry of Object.values(this._previewAnims)) {
-        const { anim, canvas, ctx, char } = entry;
+        const { anim, canvas, ctx } = entry;
         anim.update(dt);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw centered in portrait canvas
-        const scale = char.displayScale * 1.15;
-        anim.draw(
-          ctx,
-          canvas.width / 2,
-          canvas.height * 0.91,
-          scale,
-          false,
-          char.feetOffsetY
+        // Scale so character fills ~85% of the card canvas height
+        const scale = (canvas.height * 0.85) / anim.frameH;
+        const dw = anim.frameW * scale;
+        const dh = anim.frameH * scale;
+        const dx = (canvas.width - dw) / 2;
+        const dy = canvas.height - dh - 10;
+
+        // Clip to canvas bounds so no adjacent frame columns bleed in
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        ctx.clip();
+
+        // Explicitly draw only the current frame column from the sheet
+        ctx.drawImage(
+          anim.image,
+          anim.currentFrame * anim.frameW,  // src x: correct frame column
+          anim.sheetY,                       // src y
+          anim.frameW,                       // src w (one frame only)
+          anim.frameH,                       // src h
+          dx, dy, dw, dh                     // destination
         );
+
+        ctx.restore();
       }
     };
     this._rafId = requestAnimationFrame(loop);
