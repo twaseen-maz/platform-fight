@@ -34,12 +34,12 @@ const CHARACTERS = [
       jump: 'Aeris_png_jump_.png',
     },
     animations: {
-      // sheetY / frameH measured from the run sheet (all 3 sheets share the same layout).
-      // The sprite strip occupies rows 49-676 of the 1024px tall sheet.
-      // removeBackground() makes the grey bg transparent at load time.
-      idle: { frameCount: 12, frameRate:  8, loop: true,  frameW: 128, frameH: 628, sheetY: 49 },
-      run:  { frameCount:  8, frameRate: 12, loop: true,  frameW: 192, frameH: 628, sheetY: 49 },
-      jump: { frameCount:  9, frameRate: 10, loop: false, frameW: 170, frameH: 628, sheetY: 49 },
+      // Values measured directly from each sheet's pixel content.
+      // Sheets are pre-processed PNGs with background already removed (transparent).
+      // sheetY = first row of sprite content; frameH = height of sprite strip.
+      idle: { frameCount: 12, frameRate:  8, loop: true,  frameW: 128, frameH: 508, sheetY: 49  },
+      run:  { frameCount:  8, frameRate: 12, loop: true,  frameW: 192, frameH: 628, sheetY: 49  },
+      jump: { frameCount:  9, frameRate: 10, loop: false, frameW: 170, frameH: 722, sheetY: 38  },
     },
     displayScale: 0.26,
     feetOffsetY: 0.92,
@@ -164,59 +164,18 @@ function loadImage(src) {
 }
 
 /**
- * Removes the solid grey background from a sprite sheet image.
- * Samples the four corners to detect the background colour,
- * then makes all pixels within `tolerance` of that colour transparent.
- * Returns a new HTMLImageElement whose src is an offscreen canvas data-URL,
- * also exposes .naturalWidth / .naturalHeight correctly.
- *
- * @param {HTMLImageElement} img
- * @param {number} tolerance  - max per-channel delta to count as background
- * @returns {HTMLCanvasElement}  - usable as an image source in drawImage
+ * Background removal is handled offline — the PNG files already have
+ * transparent backgrounds. This function is kept as a no-op passthrough
+ * so the loading pipeline stays intact if you ever swap in raw sheets.
+ * Returns the canvas element (same interface as before).
  */
-function removeBackground(img, tolerance = 28) {
-  const w = img.naturalWidth;
-  const h = img.naturalHeight;
-
-  // Draw original onto a temp canvas to read pixels
-  const tmp = document.createElement('canvas');
-  tmp.width = w; tmp.height = h;
-  const tctx = tmp.getContext('2d');
-  tctx.drawImage(img, 0, 0);
-  const data = tctx.getImageData(0, 0, w, h);
-  const px = data.data;
-
-  // Sample background colour from the four corners (average)
-  function sample(x, y) {
-    const i = (y * w + x) * 4;
-    return [px[i], px[i+1], px[i+2]];
-  }
-  const corners = [sample(0,0), sample(w-1,0), sample(0,h-1), sample(w-1,h-1)];
-  const bg = [
-    corners.reduce((s,c) => s+c[0], 0) / 4,
-    corners.reduce((s,c) => s+c[1], 0) / 4,
-    corners.reduce((s,c) => s+c[2], 0) / 4,
-  ];
-
-  // Zero out alpha for all pixels close to the background colour
-  for (let i = 0; i < px.length; i += 4) {
-    const dr = Math.abs(px[i]   - bg[0]);
-    const dg = Math.abs(px[i+1] - bg[1]);
-    const db = Math.abs(px[i+2] - bg[2]);
-    if (Math.max(dr, dg, db) < tolerance) {
-      px[i+3] = 0;  // fully transparent
-    }
-  }
-
-  // Write cleaned pixels onto an output canvas (this is what drawImage will use)
+function removeBackground(img) {
   const out = document.createElement('canvas');
-  out.width = w; out.height = h;
-  const octx = out.getContext('2d');
-  octx.putImageData(data, 0, 0);
-
-  // Mirror .naturalWidth / .naturalHeight so Animation can read them
-  out.naturalWidth  = w;
-  out.naturalHeight = h;
+  out.width  = img.naturalWidth;
+  out.height = img.naturalHeight;
+  out.naturalWidth  = img.naturalWidth;
+  out.naturalHeight = img.naturalHeight;
+  out.getContext('2d').drawImage(img, 0, 0);
   return out;
 }
 
