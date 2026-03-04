@@ -1516,59 +1516,8 @@ const MOVESETS = {
 };
 // ═══════════════════════════════════════════════════════════
 const FIGHTER_DEFS = {
-
-  // ── Balanced Swordfighter ─────────────────────────────────
-  // Medium weight, medium speed. Strong disjoint range. 2 jumps.
-  // Falls at a moderate rate — not floaty, not a fastfaller.
-  BLADE: {
-    color:'#b8d4ff', shadowColor:'rgba(140,180,255,0.55)',
-    width:34, height:54,
-    weight:100,                      // Brawl baseline (Mario = 100)
-    groundSpeed:480, groundAccel:2600,
-    airSpeed:400,    airAccel:1600,
-    groundFrict:0.72, airFrict:0.978,
-    jumpVy:-800, dblJumpVy:-680, fastFallVy:950,
-    maxJumps:2,
-    moveset: MOVESETS.BLADE,
-  },
-
-  // ── Heavy Melee Brawler ───────────────────────────────────
-  // Heaviest fighter. Very low jump height, high fall speed (fastfaller).
-  // Groundspeed is surprisingly decent to compensate for poor air game.
-  // Single extra jump (maxJumps:2 maintained for balance; up special is recovery).
-  GRUNT: {
-    color:'#cc6622', shadowColor:'rgba(180,80,20,0.6)',
-    width:48, height:60,
-    weight:116,                      // Heavy — Bowser-tier, hard to send flying
-    groundSpeed:420, groundAccel:2000,
-    airSpeed:310,    airAccel:1100,
-    groundFrict:0.62, airFrict:0.970,
-    jumpVy:-660, dblJumpVy:-520, fastFallVy:1300,
-    maxJumps:2,
-    moveset: MOVESETS.GRUNT,
-  },
-
-  // ── Lightweight Ranged Zoner ──────────────────────────────
-  // Lightest fighter — dies early but floats with excellent air speed.
-  // Fast ground movement. Best air control in the roster.
-  // Tiny collision body (width:28) to match the small hurtbox design.
-  VEX: {
-    color:'#88ff44', shadowColor:'rgba(100,220,40,0.5)',
-    width:28, height:44,
-    weight:80,                       // Light — Jigglypuff-tier, dies early
-    groundSpeed:540, groundAccel:3200,
-    airSpeed:500,    airAccel:2400,
-    groundFrict:0.76, airFrict:0.974,
-    jumpVy:-840, dblJumpVy:-760, fastFallVy:780,
-    maxJumps:3,      // triple jump — adds to zoning / approach options
-    moveset: MOVESETS.VEX,
-  },
-
-  // ── Sprite Fighter — Marth ───────────────────────────────
-  // Plays like BLADE (reuses moveset) but renders with the Crusade sprite sheet.
-  // sprite:true activates SpriteAnimator path in Fighter.draw().
-  MARTH:  Object.assign({}, MARTH_DEF_ENTRY,  { moveset: MOVESETS.BLADE }),
-  AERIS:  Object.assign({}, AERIS_DEF_ENTRY,  { moveset: MOVESETS.BLADE }),
+  MARTH: Object.assign({}, MARTH_DEF_ENTRY, { moveset: MOVESETS.BLADE }),
+  AERIS: Object.assign({}, AERIS_DEF_ENTRY, { moveset: MOVESETS.BLADE }),
 };
 
 
@@ -3372,35 +3321,24 @@ class CharacterSelectScene extends Scene {
         isActiveSelection ? 2.5 : 1.5,
         isActiveSelection ? 1.0 : 0.5);
 
-      // Fighter sprite preview
-      const silH = cardH * 0.48;
-      uiFillRect(x + 8, cardY + 8, cardW - 16, silH, char.color, 0.07);
-      // Draw the idle frame 0 of the character's sprite sheet
-      const previewDef = FIGHTER_DEFS[char.defName];
-      const previewSheet = previewDef?.spriteSheet ? SPRITE_SHEET_MAP[previewDef.spriteSheet] : null;
-      const previewAnims = previewDef?.animFn ? ANIM_TABLE_MAP[previewDef.animFn] : null;
+      // Fighter sprite preview — idle frame 0, scaled to fill card portrait area
+      const silH = cardH * 0.55;
+      const previewDef   = FIGHTER_DEFS[char.defName];
+      const previewSheet = SPRITE_SHEET_MAP[previewDef?.spriteSheet];
+      const previewAnims = ANIM_TABLE_MAP[previewDef?.animFn];
       if (previewSheet?.ready && previewAnims?.idle?.[0]) {
         const pFrame = previewAnims.idle[0];
-        // Scale to fit inside the silH area
-        const maxH = silH - 10;
-        const sc = previewDef.spriteScale ?? 1;
-        const naturalH = pFrame.h * sc;
-        const drawSc = Math.min(sc, maxH / pFrame.h);
-        const dw = pFrame.w * drawSc;
-        const dh = pFrame.h * drawSc;
-        const px = x + (cardW - dw) / 2;
-        const py = cardY + 8 + (silH - dh);
+        // Scale so the sprite fills silH vertically, keeping aspect ratio
+        const drawSc = (silH - 6) / pFrame.h;
+        const dw = Math.round(pFrame.w * drawSc);
+        const dh = Math.round(pFrame.h * drawSc);
+        const px = Math.round(x + (cardW - dw) / 2);
+        const py = Math.round(cardY + silH - dh + 4);
         uiCtx.save();
-        uiCtx.globalAlpha = isActiveSelection ? 1.0 : 0.85;
         uiCtx.imageSmoothingEnabled = false;
+        uiCtx.globalAlpha = isActiveSelection ? 1.0 : 0.80;
         uiCtx.drawImage(previewSheet.img, pFrame.x, pFrame.y, pFrame.w, pFrame.h, px, py, dw, dh);
         uiCtx.restore();
-      } else {
-        // Fallback: colored rect while sheet loads
-        const bw = cardW * 0.28, bh = cardH * 0.30;
-        const bx = x + (cardW - bw) / 2;
-        const by = cardY + 18;
-        uiFillRect(bx, by, bw, bh, char.color, 0.6);
       }
 
       // Character name
