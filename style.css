@@ -277,16 +277,15 @@ canvas {
 /* ── DOM HUD hidden — all HUD is drawn on canvas ────────────── */
 #hud, #debug-bar { display: none !important; }
 
-/* ── Menu active: hide game canvas completely under UI overlay ── */
+/* ── Menu active: dim game canvas under UI overlay ──────────── */
 #app.menu-active #canvas-wrap {
-  visibility: hidden;   /* removes from paint — no bleed-through */
   opacity: 0;
   pointer-events: none;
+  transition: opacity 0.3s;
 }
 #app:not(.menu-active) #canvas-wrap {
-  visibility: visible;
   opacity: 1;
-  transition: opacity 0.2s;
+  transition: opacity 0.3s;
 }
 
 /* ── Sprite element (used by DOM sprite system if active) ───── */
