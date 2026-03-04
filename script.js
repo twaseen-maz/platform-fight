@@ -2637,8 +2637,10 @@ const UI = {
 
 function uiFillRect(x, y, w, h, color, alpha=1) {
   uiCtx.save();
-  uiCtx.globalAlpha = alpha;
-  uiCtx.fillStyle   = color;
+  uiCtx.globalAlpha  = alpha;
+  uiCtx.fillStyle    = color;
+  uiCtx.shadowBlur   = 0;        // never inherit glow from a previous draw
+  uiCtx.shadowColor  = 'transparent';
   uiCtx.fillRect(x, y, w, h);
   uiCtx.restore();
 }
@@ -2677,9 +2679,11 @@ function uiLine(x1, y1, x2, y2, color='#1e1e38', width=1, alpha=1) {
 
 function uiRect(x, y, w, h, color='#1e1e38', width=1, alpha=1) {
   uiCtx.save();
-  uiCtx.globalAlpha = alpha;
-  uiCtx.strokeStyle = color;
-  uiCtx.lineWidth   = width;
+  uiCtx.globalAlpha  = alpha;
+  uiCtx.strokeStyle  = color;
+  uiCtx.lineWidth    = width;
+  uiCtx.shadowBlur   = 0;
+  uiCtx.shadowColor  = 'transparent';
   uiCtx.strokeRect(x+.5, y+.5, w-1, h-1);
   uiCtx.restore();
 }
@@ -3042,6 +3046,11 @@ class CharacterSelectScene extends Scene {
 
   render() {
     const W = UI.w, H = UI.h, CX = UI.cx;
+
+    // Full clear + reset any leftover shadow/composite state from previous frames
+    uiCtx.clearRect(0, 0, W, H);
+    uiCtx.shadowBlur  = 0;
+    uiCtx.shadowColor = 'transparent';
 
     uiGridBackground(this._t * 0.3);
     uiVignette();
