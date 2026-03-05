@@ -122,6 +122,12 @@ class Animation {
     const sx = this.frame * this.fw;
     const sy = 0;
 
+    // Log every unique sx value so we can see if panning is happening
+    if (!this._lastLoggedSx || this._lastLoggedSx !== sx) {
+      console.log('[Draw] frame=' + this.frame + ' sx=' + sx + ' fw=' + this.fw + ' sheet.naturalWidth=' + this.sheet.naturalWidth);
+      this._lastLoggedSx = sx;
+    }
+
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     if (flipX) {
