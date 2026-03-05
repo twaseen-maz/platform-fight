@@ -36,7 +36,7 @@ const CHARACTERS = [
       run:  { n:8,  fw:192, fh:628, fps:18, loop:true  },
       jump: { n:9,  fw:170, fh:722, fps:14, loop:false },
     },
-    targetHeight: 220,   // rendered height in canvas pixels
+    targetHeight: 420,   // rendered height in canvas pixels
     feetOffsetY:  0.88,  // fraction of frame height = feet position
   },
 ];
@@ -121,12 +121,6 @@ class Animation {
     // Source rect: exactly one frame column, row 0
     const sx = this.frame * this.fw;
     const sy = 0;
-
-    // Log every unique sx value so we can see if panning is happening
-    if (!this._lastLoggedSx || this._lastLoggedSx !== sx) {
-      console.log('[Draw] frame=' + this.frame + ' sx=' + sx + ' fw=' + this.fw + ' sheet.naturalWidth=' + this.sheet.naturalWidth);
-      this._lastLoggedSx = sx;
-    }
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -529,10 +523,6 @@ class CharacterSelectScreen {
         run:  await loadImage(charDef.sheets.run),
         jump: await loadImage(charDef.sheets.jump),
       };
-      console.log('[Aeris] Sheets loaded:',
-        'idle', sheets.idle.naturalWidth + 'x' + sheets.idle.naturalHeight,
-        'run',  sheets.run.naturalWidth  + 'x' + sheets.run.naturalHeight,
-        'jump', sheets.jump.naturalWidth + 'x' + sheets.jump.naturalHeight);
     } catch (err) {
       console.error('Sprite load failed:', err);
       selectScreen.classList.remove('fade-out');
