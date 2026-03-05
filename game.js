@@ -26,9 +26,9 @@ const CHARACTERS = [
     name:  'Aeris',
     class: 'Blade Wanderer',
     sheets: {
-      idle: 'Aeris_clean_idle.png',
-      run:  'Aeris_clean_run.png',
-      jump: 'Aeris_clean_jump.png',
+      idle: 'Aeris_idle_v2.png',
+      run:  'Aeris_run_v2.png',
+      jump: 'Aeris_jump_v2.png',
     },
     animations: {
       //           frameCount  frameW  frameH  frameRate  loop
@@ -523,6 +523,10 @@ class CharacterSelectScreen {
         run:  await loadImage(charDef.sheets.run),
         jump: await loadImage(charDef.sheets.jump),
       };
+      console.log('[Aeris] Sheets loaded:',
+        'idle', sheets.idle.naturalWidth + 'x' + sheets.idle.naturalHeight,
+        'run',  sheets.run.naturalWidth  + 'x' + sheets.run.naturalHeight,
+        'jump', sheets.jump.naturalWidth + 'x' + sheets.jump.naturalHeight);
     } catch (err) {
       console.error('Sprite load failed:', err);
       selectScreen.classList.remove('fade-out');
