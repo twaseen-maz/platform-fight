@@ -26,18 +26,19 @@ const CHARACTERS = [
     name:  'Aeris',
     class: 'Blade Wanderer',
     sheets: {
-      idle: 'Aeris_idle_v2.png',
-      run:  'Aeris_run_v2.png',
-      jump: 'Aeris_jump_v2.png',
+      idle: 'Aeris_png_Idle.png',
+      run:  'Aeris_png_Idle.png',  // placeholder until run sheet is ready
+      jump: 'Aeris_png_Idle.png',  // placeholder until jump sheet is ready
     },
     animations: {
       //           frameCount  frameW  frameH  frameRate  loop
-      idle: { n:12, fw:128, fh:508, fps:15, loop:true  },
-      run:  { n:8,  fw:192, fh:628, fps:18, loop:true  },
-      jump: { n:9,  fw:170, fh:722, fps:14, loop:false },
+      // Sheet is 1536×1024, 11 frames horizontal → 139.6px per cell (use 139)
+      idle: { n:11, fw:139, fh:1024, fps:12, loop:true  },
+      run:  { n:11, fw:139, fh:1024, fps:14, loop:true  },  // update when run sheet added
+      jump: { n:11, fw:139, fh:1024, fps:12, loop:false },  // update when jump sheet added
     },
-    targetHeight: 600,   // rendered height in canvas pixels
-    feetOffsetY:  0.998, // feet are at the very bottom of the frame
+    targetHeight: 300,   // rendered height in canvas pixels (1024px source → scaled down)
+    feetOffsetY:  0.88,  // tweak this (0.0–1.0) to align feet to platform
   },
 ];
 
