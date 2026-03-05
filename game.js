@@ -36,8 +36,8 @@ const CHARACTERS = [
       run:  { n:8,  fw:192, fh:628, fps:18, loop:true  },
       jump: { n:9,  fw:170, fh:722, fps:14, loop:false },
     },
-    targetHeight: 420,   // rendered height in canvas pixels
-    feetOffsetY:  0.88,  // fraction of frame height = feet position
+    targetHeight: 600,   // rendered height in canvas pixels
+    feetOffsetY:  0.998, // feet are at the very bottom of the frame
   },
 ];
 
